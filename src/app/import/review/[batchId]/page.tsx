@@ -1,2 +1,15 @@
-import { notFound } from "next/navigation"; import { requireUser } from "@/lib/auth"; import { getDatabase } from "@/db"; import { getBatch } from "@/lib/services/imports"; import { confirmImportAction } from "../../../actions";
-export default async function ReviewPage({ params }: { params: Promise<{ batchId: string }> }) { const user = await requireUser(); const { batchId } = await params; const data = await getBatch(getDatabase().db, user.id, batchId); if (!data) notFound(); return <section><h1>Review import</h1><p className="muted">Choose the exact match for each row. Leaving a row unselected skips it.</p><form action={confirmImportAction} className="stack"><input type="hidden" name="batchId" value={batchId}/>{data.rows.map((row) => <article className="card" key={row.id}><h2>{row.rawInput}</h2>{row.errorMessage && <p className="error">{row.errorMessage}</p>}{!row.candidates.length && !row.errorMessage && <p className="muted">No candidates found.</p>}<div className="candidateList">{row.candidates.map((candidate) => <label className="candidate" key={candidate.key}><input type="radio" name={`row:${row.id}`} value={candidate.key}/>{candidate.coverUrl && <img src={candidate.coverUrl} alt=""/>}<span><strong>{candidate.title}</strong><small>{candidate.type} · {candidate.year ?? "year ?"} · {candidate.source}{candidate.originalTitle && candidate.originalTitle !== candidate.title ? ` · ${candidate.originalTitle}` : ""}</small></span></label>)}</div></article>)}<button type="submit">Confirm selected rows</button></form></section>; }
+import Image from "next/image";
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { getDatabase } from "@/db";
+import { getBatch } from "@/lib/services/imports";
+import { confirmImportAction } from "../../../actions";
+
+export default async function ReviewPage({ params }: { params: Promise<{ batchId: string }> }) {
+  const user = await requireUser();
+  const { batchId } = await params;
+  const data = await getBatch(getDatabase().db, user.id, batchId);
+  if (!data) notFound();
+
+  return <section><h1>Review import</h1><p className="muted">Choose the exact match for each row. Leaving a row unselected skips it.</p><form action={confirmImportAction} className="stack"><input type="hidden" name="batchId" value={batchId}/>{data.rows.map((row) => <article className="card" key={row.id}><h2>{row.rawInput}</h2>{row.errorMessage && <p className="error">{row.errorMessage}</p>}{!row.candidates.length && !row.errorMessage && <p className="muted">No candidates found.</p>}<div className="candidateList">{row.candidates.map((candidate) => <label className="candidate" key={candidate.key}><input type="radio" name={`row:${row.id}`} value={candidate.key}/>{candidate.coverUrl && <Image src={candidate.coverUrl} alt="" width={42} height={58}/>}<span><strong>{candidate.title}</strong><small>{candidate.type} · {candidate.year ?? "year ?"} · {candidate.source}{candidate.originalTitle && candidate.originalTitle !== candidate.title ? ` · ${candidate.originalTitle}` : ""}</small></span></label>)}</div></article>)}<button type="submit">Confirm selected rows</button></form></section>;
+}
