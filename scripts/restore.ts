@@ -8,7 +8,7 @@ for (const name of required) if (!process.env[name]) throw new Error(`${name} is
 const dbPath = process.env.DATABASE_PATH || "./data/media-list.db";
 const prefix = (process.env.S3_PREFIX || "media-list/").replace(/^\/+/, "");
 const client = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION || "auto", credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! } });
-let key = process.argv[2];
+let key: string | undefined = process.argv[2];
 if (!key) {
   const list = await client.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET!, Prefix: prefix }));
   key = (list.Contents ?? []).filter((x) => x.Key?.endsWith(".db")).sort((a,b) => (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0))[0]?.Key;
