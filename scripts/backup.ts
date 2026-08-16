@@ -3,21 +3,16 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from "@aws-sdk/client-s3";
 import { openDatabase } from "../src/db/index";
 import { serviceState } from "../src/db/schema";
+import { createS3Client, loadS3Config } from "../src/lib/s3";
+import { snapshotDatabase } from "../src/lib/sqlite-file";
 import { formatBytes, parseOptionalGiB, projectStorageBytes } from "../src/lib/storage-budget";
 
-const required = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const;
-for (const name of required) if (!process.env[name]) throw new Error(`${name} is required`);
-
-const client = new S3Client({
-  endpoint: process.env.S3_ENDPOINT,
-  region: process.env.S3_REGION || "auto",
-  credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! },
-});
-const bucket = process.env.S3_BUCKET!;
-const prefix = normalizePrefix(process.env.S3_PREFIX ?? "media-list/");
+const config = loadS3Config();
+const client = createS3Client(config);
+const { bucket, prefix } = config;
 const storageWarnBytes = parseOptionalGiB("S3_STORAGE_WARN_GIB", process.env.S3_STORAGE_WARN_GIB);
 const storageHardLimitBytes = parseOptionalGiB("S3_STORAGE_HARD_LIMIT_GIB", process.env.S3_STORAGE_HARD_LIMIT_GIB);
 if (storageWarnBytes && storageHardLimitBytes && storageWarnBytes > storageHardLimitBytes) {
@@ -32,12 +27,7 @@ const snapshotKey = `${prefix}snapshots/${stamp}.db`;
 const latestKey = `${prefix}latest/media-list.db`;
 const monthlyKey = `${prefix}monthly/${month}.db`;
 
-const source = openDatabase();
-try {
-  source.sqlite.prepare("VACUUM INTO ?").run(snapshotPath);
-} finally {
-  source.sqlite.close();
-}
+await snapshotDatabase(snapshotPath);
 
 try {
   const body = await readFile(snapshotPath);
@@ -124,9 +114,4 @@ function reportStorageBudget(projectedBytes: number) {
   if (storageWarnBytes && projectedBytes >= storageWarnBytes) {
     console.warn(`Backup storage warning: projected usage ${formatBytes(projectedBytes)} reached warning threshold ${formatBytes(storageWarnBytes)}`);
   }
-}
-
-function normalizePrefix(value: string) {
-  const trimmed = value.replace(/^\/+/, "").replace(/\/+$/, "");
-  return trimmed ? `${trimmed}/` : "";
 }
