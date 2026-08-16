@@ -17,7 +17,7 @@ const client = new S3Client({
   credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! },
 });
 const bucket = process.env.S3_BUCKET!;
-const prefix = normalizePrefix(process.env.S3_PREFIX || "media-list/");
+const prefix = normalizePrefix(process.env.S3_PREFIX ?? "media-list/");
 const storageWarnBytes = parseOptionalGiB("S3_STORAGE_WARN_GIB", process.env.S3_STORAGE_WARN_GIB);
 const storageHardLimitBytes = parseOptionalGiB("S3_STORAGE_HARD_LIMIT_GIB", process.env.S3_STORAGE_HARD_LIMIT_GIB);
 if (storageWarnBytes && storageHardLimitBytes && storageWarnBytes > storageHardLimitBytes) {
@@ -91,8 +91,9 @@ function staleMonthlyKeys(objects: ListedObject[], reference: Date) {
   const months = Math.max(1, Number(process.env.S3_MONTHLY_RETENTION_MONTHS || 24));
   const cutoff = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() - months + 1, 1)).toISOString().slice(0, 7);
   return objects.flatMap((item) => {
-    if (!item.Key?.startsWith(`${prefix}monthly/`)) return [];
-    const match = /\/monthly\/(\d{4}-\d{2})\.db$/.exec(item.Key);
+    if (!item.Key) return [];
+    const relativeKey = item.Key.slice(prefix.length);
+    const match = /^monthly\/(\d{4}-\d{2})\.db$/.exec(relativeKey);
     return match && match[1] < cutoff ? [item.Key] : [];
   });
 }
