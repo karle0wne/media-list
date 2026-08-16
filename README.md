@@ -77,7 +77,7 @@ docker compose up -d --build
 docker compose exec app npm run admin:create -- admin 'use-a-long-local-password'
 ```
 
-Compose explicitly applies pending Drizzle migrations before starting Next.js. The SQLite file lives at `./data/media-list.db`.
+Compose explicitly applies pending Drizzle migrations before starting Next.js. The SQLite file lives at `./data/media-list.db`. Standalone use builds the local image as `media-list:local`. Production automation may set `APP_IMAGE` to an immutable registry digest and use the same Compose contract with `docker compose pull` and `docker compose up --no-build`.
 
 For local or temporary direct access, the defaults expose `0.0.0.0:3000`. Direct public HTTP is not the recommended production configuration. Production should put the app behind HTTPS and set:
 
@@ -173,12 +173,14 @@ These are application-owned state hooks used by an external control plane for DB
 
 ## Health / revision contract
 
-`GET /api/health` verifies DB access and returns the running `APP_REVISION`. Deployment automation can therefore verify that the requested immutable revision, rather than merely some healthy container, is serving traffic.
+`GET /api/health` verifies DB access and returns the running `APP_REVISION`. Deployment automation can therefore verify the expected source revision while independently verifying the container image digest that Docker actually started.
 
 ## Data and secret policy
 
 This public repository must never contain production data or credentials. `.gitignore` and `.dockerignore` exclude SQLite files, WAL/SHM files, `.env`, CSV exports and backup directories. Production credentials belong outside this repository.
 
-## CI
+## CI and image publishing
 
-GitHub Actions runs install, lint, typecheck, invariant tests, and a production build on ordinary PR updates. The Node/npm and Next build caches are persisted between runs. A full Docker Compose production smoke test is intentionally opt-in: add the `smoke` label to a pull request to run it once; remove and re-add the label to run it again. A push to this application repository does not itself mean production deployment; production revision is selected separately by the deployment control plane.
+Ordinary pull requests run install, lint, typecheck, invariant tests, and a production Next build. The Node/npm and Next build caches are persisted between runs. A full local Docker Compose production smoke test remains opt-in on pull requests through the `smoke` label.
+
+On a push to `main`, the same CI first completes the full `verify` job. Only after that succeeds does its `publish` job build one container image tagged with the exact source commit SHA, start that exact local image through the production Compose contract, verify the revision-aware health endpoint, and push the same tested image to `ghcr.io/karle0wne/media-list`. The job records the resulting registry digest. Production must deploy by digest (`ghcr.io/karle0wne/media-list@sha256:...`), never by a mutable tag. Publishing an image is not itself a production deployment; the private control plane still selects the desired digest through review and merge.
