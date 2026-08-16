@@ -6,9 +6,10 @@ on:
       - ft/media-list-ops
     paths:
       - src/db/schema.ts
+      - .github/workflows/bootstrap-drizzle.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   generate:
@@ -21,14 +22,7 @@ jobs:
       - run: npm install
       - name: Generate migration from schema changes
         run: npm run db:generate
-      - name: Commit generated artifacts
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add drizzle
-          if git diff --cached --quiet; then
-            echo "No generated changes"
-          else
-            git commit -m "chore: generate Drizzle migration"
-            git push
-          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drizzle-generated
+          path: drizzle
