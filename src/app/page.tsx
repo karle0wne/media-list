@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { getDatabase } from "@/db";
 import { listUserMedia } from "@/lib/services/media";
 import { consumedMinutes, formatMinutes } from "@/lib/watch-time";
+import { externalMediaUrl } from "@/lib/providers/urls";
+import { isMediaStatus, isMediaType } from "@/lib/user-media";
 import type { MediaStatus, MediaType } from "@/lib/types";
 import { deleteMediaAction, updateMediaAction } from "./actions";
 
@@ -13,8 +15,8 @@ const types: Array<[string, MediaType | ""]> = [["All types", ""], ["Anime", "AN
 export default async function Home({ searchParams }: { searchParams: Promise<{ status?: string; type?: string; q?: string; error?: string }> }) {
   const user = await requireUser();
   const params = await searchParams;
-  const status = validStatus(params.status);
-  const type = validType(params.type);
+  const status = isMediaStatus(params.status) ? params.status : undefined;
+  const type = isMediaType(params.type) ? params.type : undefined;
   const items = await listUserMedia(getDatabase().db, user.id, { status, type, q: params.q });
   const videoMinutes = items.reduce((sum, item) => item.type === "BOOK" ? sum : sum + (consumedMinutes({ type: item.type, runtimeMinutes: item.runtimeMinutes, progressCurrent: item.progressCurrent, progressTotal: item.progressTotal, status: item.status, overrideMinutes: item.timeSpentOverrideMinutes }) ?? 0), 0);
   const pages = items.reduce((sum, item) => item.type === "BOOK" ? sum + item.progressCurrent : sum, 0);
@@ -24,13 +26,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
     <form className="filters" method="get"><input name="q" defaultValue={params.q ?? ""} placeholder="Search your list" /><select name="status" defaultValue={status ?? ""}>{statuses.map(([label, value]) => <option key={value} value={value}>{label}</option>)}</select><select name="type" defaultValue={type ?? ""}>{types.map(([label, value]) => <option key={value} value={value}>{label}</option>)}</select><button type="submit">Filter</button></form>
     <div className="mediaGrid">{items.map((item) => { const time = consumedMinutes({ type: item.type, runtimeMinutes: item.runtimeMinutes, progressCurrent: item.progressCurrent, progressTotal: item.progressTotal, status: item.status, overrideMinutes: item.timeSpentOverrideMinutes }); return <article className="card mediaCard" key={item.userMediaId}>
       {item.coverUrl ? <Image className="cover" src={item.coverUrl} alt="" width={84} height={118} /> : <div className="cover placeholder">{item.type}</div>}
-      <div className="grow"><div className="mediaTitle"><h2>{item.title}</h2><span className="badge">{item.type}</span></div><p className="muted">{item.year ?? "year ?"} · <a href={externalUrl(item.source, item.externalId, item.externalSubId)} target="_blank" rel="noreferrer">{item.source}</a></p><p><strong>{labelStatus(item.status)}</strong>{item.score != null ? ` · ${item.score}/10` : ""}</p><p className="muted">Progress {item.progressCurrent}{item.progressTotal != null ? ` / ${item.progressTotal}` : ""} · Time {formatMinutes(time)}</p>{item.notes && <p>{item.notes}</p>}
+      <div className="grow"><div className="mediaTitle"><h2>{item.title}</h2><span className="badge">{item.type}</span></div><p className="muted">{item.year ?? "year ?"} · <a href={externalMediaUrl(item.source, item.externalId, item.externalSubId)} target="_blank" rel="noreferrer">{item.source}</a></p><p><strong>{labelStatus(item.status)}</strong>{item.score != null ? ` · ${item.score}/10` : ""}</p><p className="muted">Progress {item.progressCurrent}{item.progressTotal != null ? ` / ${item.progressTotal}` : ""} · Time {formatMinutes(time)}</p>{item.notes && <p>{item.notes}</p>}
       <details><summary>Edit</summary><form action={updateMediaAction} className="editForm"><input type="hidden" name="id" value={item.userMediaId}/><label>Status<select name="status" defaultValue={item.status}>{statuses.filter((x) => x[1]).map(([label,value]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Score<input name="score" type="number" min="0" max="10" defaultValue={item.score ?? ""}/></label><label>Progress<input name="progressCurrent" type="number" min="0" defaultValue={item.progressCurrent}/></label><label>Total<input name="progressTotal" type="number" min="0" defaultValue={item.progressTotal ?? ""}/></label><label className="wide">Notes<textarea name="notes" rows={3} defaultValue={item.notes ?? ""}/></label><label>Manual time (minutes)<input name="timeSpentOverrideMinutes" type="number" min="0" defaultValue={item.timeSpentOverrideMinutes ?? ""}/></label><button type="submit">Save</button></form><form action={deleteMediaAction}><input type="hidden" name="id" value={item.userMediaId}/><button className="danger" type="submit">Remove from list</button></form></details></div>
     </article>; })}</div>
     {!items.length && <div className="empty"><p>No positions match these filters.</p><Link href="/media/new">Add your first one</Link></div>}
   </section>;
 }
-function validStatus(value?: string): MediaStatus | undefined { return ["PLANNED","IN_PROGRESS","COMPLETED","ON_HOLD","DROPPED"].includes(value ?? "") ? value as MediaStatus : undefined; }
-function validType(value?: string): MediaType | undefined { return ["ANIME","MOVIE","SERIES","BOOK"].includes(value ?? "") ? value as MediaType : undefined; }
 function labelStatus(status: MediaStatus) { return ({ PLANNED:"Planned", IN_PROGRESS:"Watching / Reading", COMPLETED:"Completed", ON_HOLD:"On hold", DROPPED:"Dropped" } as const)[status]; }
-function externalUrl(source: string, id: string, sub: string) { if (source === "ANILIST") return `https://anilist.co/anime/${id}`; if (source === "OPENLIBRARY") return `https://openlibrary.org/works/${id}`; if (source === "TMDB" && sub.startsWith("season:")) return `https://www.themoviedb.org/tv/${id}/season/${sub.slice(7)}`; return `https://www.themoviedb.org/movie/${id}`; }
