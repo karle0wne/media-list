@@ -1,0 +1,71 @@
+import {
+  EXTERNAL_SOURCES,
+  MEDIA_STATUSES,
+  MEDIA_TYPES,
+  type ExternalSource,
+  type ImportedUserData,
+  type MediaStatus,
+  type MediaType,
+} from "./types";
+
+export function isMediaStatus(value: string | undefined): value is MediaStatus {
+  return MEDIA_STATUSES.includes(value as MediaStatus);
+}
+
+export function isMediaType(value: string | undefined): value is MediaType {
+  return MEDIA_TYPES.includes(value as MediaType);
+}
+
+export function parseMediaStatus(value: string | undefined, required = false): MediaStatus | undefined {
+  const normalized = value?.trim();
+  if (!normalized) {
+    if (required) throw new Error("status is required");
+    return undefined;
+  }
+  if (!isMediaStatus(normalized)) throw new Error(`unsupported status ${normalized}`);
+  return normalized;
+}
+
+export function parseMediaType(value: string | undefined): MediaType {
+  const normalized = value?.trim();
+  if (!normalized || !isMediaType(normalized)) throw new Error(`unsupported type ${normalized ?? ""}`);
+  return normalized;
+}
+
+export function parseExternalSource(value: string | undefined): ExternalSource {
+  const normalized = value?.trim();
+  if (!normalized || !EXTERNAL_SOURCES.includes(normalized as ExternalSource)) {
+    throw new Error(`unsupported external_source ${normalized ?? ""}`);
+  }
+  return normalized as ExternalSource;
+}
+
+type UserMediaTextInput = {
+  status?: string;
+  score?: string;
+  progressCurrent?: string;
+  progressTotal?: string;
+  notes?: string;
+  timeSpentOverrideMinutes?: string;
+};
+
+export function parseUserMediaInput(input: UserMediaTextInput, options: { requireStatus?: boolean } = {}): ImportedUserData {
+  return {
+    status: parseMediaStatus(input.status, options.requireStatus ?? false),
+    score: parseOptionalNonNegativeInteger(input.score, "score", 10),
+    progressCurrent: parseOptionalNonNegativeInteger(input.progressCurrent, "progress_current") ?? 0,
+    progressTotal: parseOptionalNonNegativeInteger(input.progressTotal, "progress_total"),
+    notes: input.notes?.trim() ? input.notes.trim() : null,
+    timeSpentOverrideMinutes: parseOptionalNonNegativeInteger(input.timeSpentOverrideMinutes, "time_spent_override_minutes"),
+  };
+}
+
+export function parseOptionalNonNegativeInteger(value: string | undefined, label: string, max?: number): number | null {
+  if (value == null || value.trim() === "") return null;
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) throw new Error(`${label} must be a non-negative integer`);
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed)) throw new Error(`${label} is too large`);
+  if (max != null && parsed > max) throw new Error(`${label} must be 0..${max}`);
+  return parsed;
+}
