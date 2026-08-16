@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, like, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
-import type { ImportedUserData, MediaCandidate, MediaStatus, MediaType } from "../types";
+import { resolveExact } from "../providers";
+import type { ImportedUserData, MediaCandidate, MediaIdentity, MediaStatus, MediaType } from "../types";
 
 export async function ensureMedia(db: AppDb, candidate: MediaCandidate) {
   const existing = await findMedia(db, candidate.source, candidate.externalId, candidate.externalSubId);
@@ -11,24 +12,30 @@ export async function ensureMedia(db: AppDb, candidate: MediaCandidate) {
   await db.insert(media).values({
     id: randomUUID(),
     type: candidate.type,
-    title: candidate.title,
-    originalTitle: candidate.originalTitle ?? null,
-    countryCode: candidate.countryCode ?? null,
-    year: candidate.year ?? null,
     externalSource: candidate.source,
     externalId: candidate.externalId,
     externalSubId: candidate.externalSubId,
-    runtimeMinutes: candidate.runtimeMinutes ?? null,
-    episodeCount: candidate.episodeCount ?? null,
-    pageCount: candidate.pageCount ?? null,
-    coverUrl: candidate.coverUrl ?? null,
-    metadataJson: JSON.stringify({ description: candidate.description ?? null }),
+    ...candidateMetadataValues(candidate),
     metadataRefreshedAt: candidate.source === "TMDB" ? now : null,
     createdAt: now,
   }).onConflictDoNothing();
   const resolved = await findMedia(db, candidate.source, candidate.externalId, candidate.externalSubId);
   if (!resolved) throw new Error("Failed to create media record");
   return resolved;
+}
+
+export async function refreshMediaMetadata(db: AppDb, mediaId: string, candidate: MediaCandidate, refreshedAt = new Date()) {
+  await db.update(media).set({ ...candidateMetadataValues(candidate), metadataRefreshedAt: refreshedAt }).where(eq(media.id, mediaId));
+}
+
+export async function resolveAndAddMedia(db: AppDb, userId: string, identity: MediaIdentity, userData: ImportedUserData = {}) {
+  const candidate = await resolveExact(identity.source, identity.externalId, identity.externalSubId, identity.type);
+  if (!candidate) throw new Error("Provider validation failed");
+  if (candidate.source !== identity.source || candidate.externalId !== identity.externalId || candidate.externalSubId !== identity.externalSubId) {
+    throw new Error("Provider returned a different media identity");
+  }
+  if (candidate.type !== identity.type) throw new Error(`Provider item type is ${candidate.type}, expected ${identity.type}`);
+  return addMediaToUser(db, userId, candidate, userData);
 }
 
 export async function addMediaToUser(db: AppDb, userId: string, candidate: MediaCandidate, userData: ImportedUserData = {}) {
@@ -54,6 +61,20 @@ export async function listUserMedia(db: AppDb, userId: string, filters: { status
   if (filters.type) clauses.push(eq(media.type, filters.type));
   if (filters.q?.trim()) clauses.push(like(media.title, `%${filters.q.trim()}%`));
   return db.select({ userMediaId: userMedia.id, mediaId: media.id, title: media.title, originalTitle: media.originalTitle, type: media.type, year: media.year, source: media.externalSource, externalId: media.externalId, externalSubId: media.externalSubId, runtimeMinutes: media.runtimeMinutes, pageCount: media.pageCount, coverUrl: media.coverUrl, status: userMedia.status, score: userMedia.score, progressCurrent: userMedia.progressCurrent, progressTotal: userMedia.progressTotal, notes: userMedia.notes, timeSpentOverrideMinutes: userMedia.timeSpentOverrideMinutes, updatedAt: userMedia.updatedAt }).from(userMedia).innerJoin(media, eq(userMedia.mediaId, media.id)).where(and(...clauses)).orderBy(desc(userMedia.updatedAt));
+}
+
+function candidateMetadataValues(candidate: MediaCandidate) {
+  return {
+    title: candidate.title,
+    originalTitle: candidate.originalTitle ?? null,
+    countryCode: candidate.countryCode ?? null,
+    year: candidate.year ?? null,
+    runtimeMinutes: candidate.runtimeMinutes ?? null,
+    episodeCount: candidate.episodeCount ?? null,
+    pageCount: candidate.pageCount ?? null,
+    coverUrl: candidate.coverUrl ?? null,
+    metadataJson: JSON.stringify({ description: candidate.description ?? null }),
+  };
 }
 
 async function findMedia(db: AppDb, source: MediaCandidate["source"], externalId: string, externalSubId: string) {
