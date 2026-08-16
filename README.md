@@ -7,7 +7,7 @@ The core rule is that titles are for display and search; identity comes from an 
 ## Stack
 
 - Next.js App Router + TypeScript
-- SQLite via Node 22 `node:sqlite`
+- SQLite via Node 24 `node:sqlite`
 - Drizzle ORM + one immutable Drizzle migration chain
 - Local username/password auth with server-side opaque sessions
 - AniList for anime/donghua
@@ -43,7 +43,7 @@ Supported URLs in Quick Import include AniList, MyAnimeList anime URLs, TMDB mov
 
 ## Local development
 
-Requirements: Node.js 22.5+.
+Requirements: Node.js 24.15+.
 
 ```bash
 cp .env.example .env
@@ -136,17 +136,23 @@ Configure the `S3_*` variables, then run:
 docker compose exec app npm run backup
 ```
 
-The backup command makes a transactionally consistent SQLite snapshot and uses this remote layout:
+The backup command makes a transactionally consistent SQLite snapshot. All application-owned objects live below `S3_PREFIX` (default `media-list/`) with this layout:
 
 ```text
-latest/media-list.db       latest successful state; never pruned by the app
-snapshots/<timestamp>.db   rolling history, default 90 days
-monthly/<yyyy-mm>.db       one long-term point per month, default 24 months
+media-list/latest/media-list.db       latest successful state; never pruned by the app
+media-list/snapshots/<timestamp>.db   rolling history, default 90 days
+media-list/monthly/<yyyy-mm>.db       one long-term point per month, default 24 months
 ```
 
-`latest` is updated only after the timestamped snapshot upload succeeds. The admin page shows the last successful backup recorded by the application. Snapshot/monthly retention is configurable through `S3_SNAPSHOT_RETENTION_DAYS` and `S3_MONTHLY_RETENTION_MONTHS`.
+The prefix is configurable; the layout above shows the default. Retention is applied before a new upload. The timestamped snapshot is uploaded first, the monthly point is created when needed, and `latest` is updated last. Snapshot/monthly retention is configurable through `S3_SNAPSHOT_RETENTION_DAYS` and `S3_MONTHLY_RETENTION_MONTHS`.
 
-Restore defaults to `latest/media-list.db`:
+Backup storage has an optional provider-neutral budget guard. The command totals current object sizes under `S3_PREFIX` using the standard S3 `ListObjectsV2` API, accounts for retention and planned overwrites, and prints projected usage on every run. `S3_STORAGE_WARN_GIB` emits a warning when the projected size reaches a soft threshold. `S3_STORAGE_HARD_LIMIT_GIB` aborts before uploading new objects when the projected size would exceed the hard threshold. Both are optional and are deliberately not tied to Cloudflare pricing; set them according to the S3-compatible provider and account being used.
+
+Because the application already keeps timestamped and monthly history, provider-side bucket versioning is unnecessary. If versioning is enabled externally, non-current object versions may consume storage that `ListObjectsV2` does not include in this lightweight guard.
+
+The admin page shows the last successful backup recorded by the application.
+
+Restore defaults to `latest/media-list.db` below `S3_PREFIX`:
 
 ```bash
 docker compose stop app
@@ -175,4 +181,4 @@ This public repository must never contain production data or credentials. `.giti
 
 ## CI
 
-GitHub Actions runs install, lint, typecheck, invariant tests, and a production build. A push to this application repository does not itself mean production deployment; production revision is selected separately by the deployment control plane.
+GitHub Actions runs install, lint, typecheck, invariant tests, and a production build on ordinary PR updates. The Node/npm and Next build caches are persisted between runs. A full Docker Compose production smoke test is intentionally opt-in: add the `smoke` label to a pull request to run it once; remove and re-add the label to run it again. A push to this application repository does not itself mean production deployment; production revision is selected separately by the deployment control plane.
