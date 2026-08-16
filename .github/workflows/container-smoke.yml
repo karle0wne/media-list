@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event.label.name == 'run-container-smoke'
+    if: github.event.label.name == 'smoke'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
