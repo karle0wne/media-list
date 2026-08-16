@@ -51,3 +51,21 @@ test("sqlite restore rejects a corrupt source without replacing the target", asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("sqlite restore rejects a missing source without creating it or replacing the target", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "media-list-sqlite-missing-"));
+  const source = join(dir, "missing.db");
+  const target = join(dir, "target.db");
+  try {
+    const targetDb = new DatabaseSync(target);
+    targetDb.exec("CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('keep-me')");
+    targetDb.close();
+    const before = await readFile(target);
+
+    await assert.rejects(() => replaceDatabase(source, target), /does not exist/);
+    await assert.rejects(() => readFile(source));
+    assert.deepEqual(await readFile(target), before);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
