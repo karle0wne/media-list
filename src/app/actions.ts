@@ -3,21 +3,58 @@ import { redirect } from "next/navigation";
 import { getDatabase } from "@/db";
 import { createSession, deleteCurrentSession, requireAdmin, requireUser } from "@/lib/auth";
 import { authenticate, createInvite, registerWithInvite, setUserActive } from "@/lib/services/users";
-import { deleteUserMedia, addMediaToUser, updateUserMedia } from "@/lib/services/media";
-import { parseCandidateKey, resolveExact } from "@/lib/providers";
+import { deleteUserMedia, resolveAndAddMedia, updateUserMedia } from "@/lib/services/media";
+import { parseCandidateKey } from "@/lib/providers";
 import { createMigrationImport, createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
-import type { MediaStatus } from "@/lib/types";
+import { parseMediaType, parseUserMediaInput } from "@/lib/user-media";
+
 function str(form: FormData, key: string) { const value = form.get(key); return typeof value === "string" ? value.trim() : ""; }
-function intOrNull(value: string) { if (!value) return null; const n = Number.parseInt(value, 10); return Number.isInteger(n) && n >= 0 ? n : null; }
 function goError(path: string, error: unknown): never { const message = error instanceof Error ? error.message : "Unexpected error"; redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`); }
+
 export async function loginAction(form: FormData) { const { db } = getDatabase(); const user = await authenticate(db, str(form, "username"), str(form, "password")); if (!user) redirect("/login?error=Invalid%20username%20or%20password"); await createSession(user.id); redirect("/"); }
 export async function logoutAction() { await deleteCurrentSession(); redirect("/login"); }
 export async function registerAction(form: FormData) { const token = str(form, "token"); try { const id = await registerWithInvite(getDatabase().db, token, str(form, "username"), str(form, "password")); await createSession(id); } catch (error) { goError(`/register?token=${encodeURIComponent(token)}`, error); } redirect("/"); }
 export async function createInviteAction() { const admin = await requireAdmin(); let token: string; try { token = await createInvite(getDatabase().db, admin.id); } catch (error) { goError("/admin", error); } redirect(`/admin?invite=${encodeURIComponent(token)}`); }
 export async function toggleUserAction(form: FormData) { const admin = await requireAdmin(); const userId = str(form, "userId"); if (userId === admin.id) redirect("/admin?error=You%20cannot%20disable%20yourself"); await setUserActive(getDatabase().db, userId, str(form, "active") === "true"); redirect("/admin"); }
-export async function addCandidateAction(form: FormData) { const user = await requireUser(); const parsed = parseCandidateKey(str(form, "candidateKey")); const type = str(form, "type") as "ANIME" | "MOVIE" | "SERIES" | "BOOK"; if (!parsed) redirect("/media/new?error=Invalid%20candidate"); const exact = await resolveExact(parsed.source, parsed.externalId, parsed.externalSubId, type); if (!exact) redirect("/media/new?error=Provider%20validation%20failed"); await addMediaToUser(getDatabase().db, user.id, exact); redirect("/"); }
-export async function updateMediaAction(form: FormData) { const user = await requireUser(); const status = str(form, "status") as MediaStatus; if (!new Set(["PLANNED", "IN_PROGRESS", "COMPLETED", "ON_HOLD", "DROPPED"]).has(status)) redirect("/?error=Invalid%20status"); const score = intOrNull(str(form, "score")); if (score != null && score > 10) redirect("/?error=Score%20must%20be%200..10"); await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { status, score, progressCurrent: intOrNull(str(form, "progressCurrent")) ?? 0, progressTotal: intOrNull(str(form, "progressTotal")), notes: str(form, "notes") || null, timeSpentOverrideMinutes: intOrNull(str(form, "timeSpentOverrideMinutes")) }); redirect("/"); }
+
+export async function addCandidateAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const parsed = parseCandidateKey(str(form, "candidateKey"));
+    if (!parsed) throw new Error("Invalid candidate");
+    await resolveAndAddMedia(getDatabase().db, user.id, { ...parsed, type: parseMediaType(str(form, "type")) });
+  } catch (error) {
+    goError("/media/new", error);
+  }
+  redirect("/");
+}
+
+export async function updateMediaAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const values = parseUserMediaInput({
+      status: str(form, "status"),
+      score: str(form, "score"),
+      progressCurrent: str(form, "progressCurrent"),
+      progressTotal: str(form, "progressTotal"),
+      notes: str(form, "notes"),
+      timeSpentOverrideMinutes: str(form, "timeSpentOverrideMinutes"),
+    }, { requireStatus: true });
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), {
+      status: values.status!,
+      score: values.score ?? null,
+      progressCurrent: values.progressCurrent ?? 0,
+      progressTotal: values.progressTotal ?? null,
+      notes: values.notes ?? null,
+      timeSpentOverrideMinutes: values.timeSpentOverrideMinutes ?? null,
+    });
+  } catch (error) {
+    goError("/", error);
+  }
+  redirect("/");
+}
+
 export async function deleteMediaAction(form: FormData) { const user = await requireUser(); await deleteUserMedia(getDatabase().db, user.id, str(form, "id")); redirect("/"); }
 export async function quickImportAction(form: FormData) { const user = await requireUser(); let batchId: string; try { batchId = await createQuickImport(getDatabase().db, user.id, str(form, "text")); } catch (error) { goError("/import", error); } redirect(`/import/review/${batchId}`); }
 export async function migrationImportAction(form: FormData) { const user = await requireUser(); let batchId: string; try { const file = form.get("file"); if (!(file instanceof File) || file.size === 0) throw new Error("Choose a migration CSV file"); if (file.size > 2_000_000) throw new Error("Migration CSV is too large (2 MB max)"); batchId = await createMigrationImport(getDatabase().db, user.id, await file.text()); } catch (error) { goError("/import", error); } redirect(`/import/review/${batchId}`); }

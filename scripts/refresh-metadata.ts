@@ -3,6 +3,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
 import { media } from "../src/db/schema";
 import { resolveExact } from "../src/lib/providers";
+import { refreshMediaMetadata } from "../src/lib/services/media";
 
 export async function refreshTmdbMetadata(now = new Date()) {
   if (!process.env.TMDB_API_TOKEN?.trim()) return { refreshed: 0, failed: 0, skipped: true };
@@ -24,18 +25,7 @@ export async function refreshTmdbMetadata(now = new Date()) {
           failed += 1;
           continue;
         }
-        await db.update(media).set({
-          title: candidate.title,
-          originalTitle: candidate.originalTitle ?? null,
-          countryCode: candidate.countryCode ?? null,
-          year: candidate.year ?? null,
-          runtimeMinutes: candidate.runtimeMinutes ?? null,
-          episodeCount: candidate.episodeCount ?? null,
-          pageCount: candidate.pageCount ?? null,
-          coverUrl: candidate.coverUrl ?? null,
-          metadataJson: JSON.stringify({ description: candidate.description ?? null }),
-          metadataRefreshedAt: now,
-        }).where(eq(media.id, item.id));
+        await refreshMediaMetadata(db, item.id, candidate, now);
         refreshed += 1;
       } catch (error) {
         failed += 1;
