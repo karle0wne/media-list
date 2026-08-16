@@ -2,15 +2,43 @@ import { eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
 import { parseCsv, rowsToObjects, stringifyCsv } from "../csv";
-import { resolveExact } from "../providers";
-import type { ExternalSource, ImportedUserData, MediaStatus, MediaType } from "../types";
-import { addMediaToUser } from "./media";
+import { parseExternalSource, parseMediaType, parseUserMediaInput } from "../user-media";
+import { resolveAndAddMedia } from "./media";
 
 export const CANONICAL_HEADERS = ["external_source","external_id","external_sub_id","type","title","status","score","progress_current","progress_total","notes","time_spent_override_minutes"] as const;
-export async function exportCanonical(db: AppDb, userId: string) { const rows = await db.select({ source: media.externalSource, externalId: media.externalId, externalSubId: media.externalSubId, type: media.type, title: media.title, status: userMedia.status, score: userMedia.score, progressCurrent: userMedia.progressCurrent, progressTotal: userMedia.progressTotal, notes: userMedia.notes, timeSpentOverrideMinutes: userMedia.timeSpentOverrideMinutes }).from(userMedia).innerJoin(media, eq(userMedia.mediaId, media.id)).where(eq(userMedia.userId, userId)); return stringifyCsv([[...CANONICAL_HEADERS], ...rows.map((r) => [r.source, r.externalId, r.externalSubId, r.type, r.title, r.status, r.score, r.progressCurrent, r.progressTotal, r.notes, r.timeSpentOverrideMinutes])]); }
-export async function importCanonical(db: AppDb, userId: string, input: string) { const objects = rowsToObjects(parseCsv(input)); const report = { imported: 0, duplicates: 0, invalid: 0, errors: [] as string[] }; for (let i = 0; i < objects.length; i += 1) { const row = objects[i]; try { const source = sourceValue(row.external_source); const type = typeValue(row.type); const candidate = await resolveExact(source, row.external_id, row.external_sub_id ?? "", type); if (!candidate) throw new Error("external ID could not be validated"); if (candidate.type !== type) throw new Error(`provider item type is ${candidate.type}, CSV says ${type}`); const result = await addMediaToUser(db, userId, candidate, parseUserData(row)); if (result.inserted) report.imported += 1; else report.duplicates += 1; } catch (error) { report.invalid += 1; report.errors.push(`row ${i + 2}: ${error instanceof Error ? error.message : "unknown error"}`); } } return report; }
-function sourceValue(value: string): ExternalSource { if (value === "ANILIST" || value === "TMDB" || value === "OPENLIBRARY") return value; throw new Error(`unsupported external_source ${value}`); }
-function typeValue(value: string): MediaType { if (value === "ANIME" || value === "MOVIE" || value === "SERIES" || value === "BOOK") return value; throw new Error(`unsupported type ${value}`); }
-function statusValue(value?: string): MediaStatus | undefined { if (!value) return undefined; if (["PLANNED","IN_PROGRESS","COMPLETED","ON_HOLD","DROPPED"].includes(value)) return value as MediaStatus; throw new Error(`unsupported status ${value}`); }
-function nullableInt(value?: string) { if (value == null || value.trim() === "") return null; const number = Number.parseInt(value, 10); if (!Number.isFinite(number) || number < 0) throw new Error(`invalid integer ${value}`); return number; }
-function parseUserData(row: Record<string, string>): ImportedUserData { const score = nullableInt(row.score); if (score != null && score > 10) throw new Error("score must be 0..10"); return { status: statusValue(row.status), score, progressCurrent: nullableInt(row.progress_current) ?? 0, progressTotal: nullableInt(row.progress_total), notes: row.notes || null, timeSpentOverrideMinutes: nullableInt(row.time_spent_override_minutes) }; }
+
+export async function exportCanonical(db: AppDb, userId: string) {
+  const rows = await db.select({ source: media.externalSource, externalId: media.externalId, externalSubId: media.externalSubId, type: media.type, title: media.title, status: userMedia.status, score: userMedia.score, progressCurrent: userMedia.progressCurrent, progressTotal: userMedia.progressTotal, notes: userMedia.notes, timeSpentOverrideMinutes: userMedia.timeSpentOverrideMinutes }).from(userMedia).innerJoin(media, eq(userMedia.mediaId, media.id)).where(eq(userMedia.userId, userId));
+  return stringifyCsv([[...CANONICAL_HEADERS], ...rows.map((row) => [row.source, row.externalId, row.externalSubId, row.type, row.title, row.status, row.score, row.progressCurrent, row.progressTotal, row.notes, row.timeSpentOverrideMinutes])]);
+}
+
+export async function importCanonical(db: AppDb, userId: string, input: string) {
+  const objects = rowsToObjects(parseCsv(input));
+  const report = { imported: 0, duplicates: 0, invalid: 0, errors: [] as string[] };
+  for (let index = 0; index < objects.length; index += 1) {
+    const row = objects[index];
+    try {
+      const identity = {
+        source: parseExternalSource(row.external_source),
+        externalId: row.external_id,
+        externalSubId: row.external_sub_id ?? "",
+        type: parseMediaType(row.type),
+      };
+      if (!identity.externalId?.trim()) throw new Error("external_id is required");
+      const userData = parseUserMediaInput({
+        status: row.status,
+        score: row.score,
+        progressCurrent: row.progress_current,
+        progressTotal: row.progress_total,
+        notes: row.notes,
+        timeSpentOverrideMinutes: row.time_spent_override_minutes,
+      });
+      const result = await resolveAndAddMedia(db, userId, { ...identity, externalId: identity.externalId.trim(), externalSubId: identity.externalSubId.trim() }, userData);
+      if (result.inserted) report.imported += 1; else report.duplicates += 1;
+    } catch (error) {
+      report.invalid += 1;
+      report.errors.push(`row ${index + 2}: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+  }
+  return report;
+}
