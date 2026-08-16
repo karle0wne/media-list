@@ -42,4 +42,5 @@ jobs:
         if: always()
         run: |
           docker compose down --remove-orphans || true
-          rm -rf data .env
+          sudo rm -rf data
+          rm -f .env
