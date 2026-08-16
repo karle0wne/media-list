@@ -1,5 +1,37 @@
-export type MediaType = "ANIME" | "MOVIE" | "SERIES" | "BOOK";
-export type MediaStatus = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "ON_HOLD" | "DROPPED";
-export type ExternalSource = "ANILIST" | "TMDB" | "OPENLIBRARY";
-export type MediaCandidate = { key: string; type: MediaType; source: ExternalSource; externalId: string; externalSubId: string; title: string; originalTitle?: string | null; countryCode?: string | null; year?: number | null; runtimeMinutes?: number | null; episodeCount?: number | null; pageCount?: number | null; coverUrl?: string | null; description?: string | null; };
-export type ImportedUserData = { status?: MediaStatus; score?: number | null; progressCurrent?: number; progressTotal?: number | null; notes?: string | null; timeSpentOverrideMinutes?: number | null; };
+export const MEDIA_TYPES = ["ANIME", "MOVIE", "SERIES", "BOOK"] as const;
+export type MediaType = (typeof MEDIA_TYPES)[number];
+
+export const MEDIA_STATUSES = ["PLANNED", "IN_PROGRESS", "COMPLETED", "ON_HOLD", "DROPPED"] as const;
+export type MediaStatus = (typeof MEDIA_STATUSES)[number];
+
+export const EXTERNAL_SOURCES = ["ANILIST", "TMDB", "OPENLIBRARY"] as const;
+export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
+
+export type MediaIdentity = {
+  source: ExternalSource;
+  externalId: string;
+  externalSubId: string;
+  type: MediaType;
+};
+
+export type MediaCandidate = MediaIdentity & {
+  key: string;
+  title: string;
+  originalTitle?: string | null;
+  countryCode?: string | null;
+  year?: number | null;
+  runtimeMinutes?: number | null;
+  episodeCount?: number | null;
+  pageCount?: number | null;
+  coverUrl?: string | null;
+  description?: string | null;
+};
+
+export type ImportedUserData = {
+  status?: MediaStatus;
+  score?: number | null;
+  progressCurrent?: number;
+  progressTotal?: number | null;
+  notes?: string | null;
+  timeSpentOverrideMinutes?: number | null;
+};
