@@ -9,20 +9,30 @@ on:
       - .github/workflows/bootstrap-drizzle.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install
       - name: Generate migration from schema changes
         run: npm run db:generate
-      - uses: actions/upload-artifact@v4
-        with:
-          name: drizzle-generated
-          path: drizzle
+      - name: Commit generated artifacts
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add drizzle
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "chore: generate Drizzle migration"
+          git pull --rebase origin ft/media-list-ops
+          git push origin HEAD:ft/media-list-ops
