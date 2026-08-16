@@ -1,0 +1,36 @@
+name: Bootstrap Drizzle artifacts
+
+on:
+  push:
+    branches:
+      - ft/media-list-ops
+    paths:
+      - .github/workflows/bootstrap-drizzle.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Regenerate canonical initial migration
+        run: |
+          rm -rf drizzle
+          npm run db:generate
+      - name: Commit generated artifacts
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add drizzle
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "chore: bootstrap Drizzle migration artifacts"
+            git push
+          fi
