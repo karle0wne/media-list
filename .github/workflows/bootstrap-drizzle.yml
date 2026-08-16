@@ -1,11 +1,11 @@
-name: Bootstrap Drizzle artifacts
+name: Generate Drizzle migration artifacts
 
 on:
   push:
     branches:
       - ft/media-list-ops
     paths:
-      - .github/workflows/bootstrap-drizzle.yml
+      - src/db/schema.ts
 
 permissions:
   contents: write
@@ -19,10 +19,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - name: Regenerate canonical initial migration
-        run: |
-          rm -rf drizzle
-          npm run db:generate
+      - name: Generate migration from schema changes
+        run: npm run db:generate
       - name: Commit generated artifacts
         run: |
           git config user.name github-actions[bot]
@@ -31,6 +29,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No generated changes"
           else
-            git commit -m "chore: bootstrap Drizzle migration artifacts"
+            git commit -m "chore: generate Drizzle migration"
             git push
           fi
