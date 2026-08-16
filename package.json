@@ -13,6 +13,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "admin:create": "tsx scripts/create-admin.ts",
     "snapshot": "tsx scripts/snapshot.ts",
+    "restore:local": "tsx scripts/restore-local.ts",
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "maintenance": "tsx scripts/maintenance.ts",
