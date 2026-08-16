@@ -11,15 +11,25 @@ jobs:
   smoke:
     if: github.event.label.name == 'smoke'
     runs-on: ubuntu-latest
+    env:
+      APP_REVISION: ${{ github.event.pull_request.head.sha }}
+      SMOKE_IMAGE: media-list:smoke-${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v6
-      - name: Validate Compose and start production container
-        env:
-          APP_REVISION: ${{ github.event.pull_request.head.sha }}
+
+      - name: Build smoke image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${APP_REVISION}" \
+            -t "$SMOKE_IMAGE" .
+
+      - name: Start exact image through Compose
         run: |
           cp .env.example .env
-          docker compose config >/dev/null
-          APP_BIND=127.0.0.1 APP_PORT=3000 APP_REVISION="$APP_REVISION" docker compose up -d --build
+          APP_IMAGE="$SMOKE_IMAGE" docker compose config >/dev/null
+          APP_IMAGE="$SMOKE_IMAGE" APP_BIND=127.0.0.1 APP_PORT=3000 APP_REVISION="$APP_REVISION" \
+            docker compose up -d --no-build --pull never
           for _ in $(seq 1 60); do
             body="$(curl -fsS http://127.0.0.1:3000/api/health 2>/dev/null || true)"
             if [[ "$body" == *"\"ok\":true"* && "$body" == *"\"revision\":\"${APP_REVISION}\""* ]]; then
@@ -29,9 +39,10 @@ jobs:
           done
           docker compose logs
           exit 1
+
       - name: Cleanup
         if: always()
         run: |
-          docker compose down --remove-orphans || true
+          APP_IMAGE="$SMOKE_IMAGE" docker compose down --remove-orphans || true
           sudo rm -rf data
           rm -f .env
