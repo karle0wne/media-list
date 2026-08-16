@@ -7,7 +7,7 @@ const required = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACC
 for (const name of required) if (!process.env[name]) throw new Error(`${name} is required`);
 
 const dbPath = process.env.DATABASE_PATH || "./data/media-list.db";
-const prefix = normalizePrefix(process.env.S3_PREFIX || "media-list/");
+const prefix = normalizePrefix(process.env.S3_PREFIX ?? "media-list/");
 const key = process.argv[2] || `${prefix}latest/media-list.db`;
 const client = new S3Client({
   endpoint: process.env.S3_ENDPOINT,
