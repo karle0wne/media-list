@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -8,6 +9,7 @@ export async function snapshotDatabase(targetPath: string, sourcePath = database
   const source = resolve(sourcePath);
   const target = resolve(targetPath);
   if (source === target) throw new Error("Snapshot target must differ from database path");
+  if (sourcePath !== ":memory:" && !existsSync(source)) throw new Error(`SQLite source does not exist: ${source}`);
   await mkdir(dirname(target), { recursive: true });
   await rm(target, { force: true });
   const { sqlite } = openDatabase(sourcePath);
@@ -40,6 +42,7 @@ export async function replaceDatabase(sourcePath: string, targetPath = databaseP
 }
 
 export function assertHealthySqlite(path: string) {
+  if (!existsSync(path)) throw new Error(`SQLite file does not exist: ${path}`);
   const sqlite = new DatabaseSync(path);
   try {
     const row = sqlite.prepare("PRAGMA quick_check").get() as Record<string, unknown> | undefined;
