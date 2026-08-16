@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const tsx = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
 
-function run(script: string, args: string[] = [], extraEnv: NodeJS.ProcessEnv = {}) {
+function run(script: string, args: string[] = [], extraEnv: Record<string, string | undefined> = {}) {
   const env = { ...process.env, ...extraEnv };
   delete env.S3_ENDPOINT;
   delete env.S3_BUCKET;
