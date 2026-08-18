@@ -20,6 +20,9 @@ function assertOperationalSchema(path: string) {
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='service_state'").get());
     const columns = db.prepare("PRAGMA table_info(media)").all() as Array<{ name: string }>;
     assert.ok(columns.some((column) => column.name === "metadata_refreshed_at"));
+    assert.ok(columns.some((column) => column.name === "metadata_status"));
+    assert.ok(columns.some((column) => column.name === "metadata_error"));
+    assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='media_metadata_status_idx'").get());
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'").get());
   } finally {
     db.close();
@@ -54,7 +57,7 @@ test("legacy 0000 database is baselined before later Drizzle migrations", () => 
     const migrated = new DatabaseSync(path);
     try {
       const history = migrated.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at").all() as Array<{ created_at: number }>;
-      assert.ok(history.length >= 2);
+      assert.ok(history.length >= 3);
       assert.equal(Number(history[0].created_at), 1786890906000);
     } finally {
       migrated.close();

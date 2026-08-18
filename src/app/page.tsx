@@ -2,18 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getDatabase } from "@/db";
+import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import { listUserMedia } from "@/lib/services/media";
 import { consumedMinutes, formatMinutes } from "@/lib/watch-time";
 import { externalMediaUrl } from "@/lib/providers/urls";
 import { isMediaStatus, isMediaType } from "@/lib/user-media";
 import type { MediaStatus, MediaType } from "@/lib/types";
-import { deleteMediaAction, updateMediaAction } from "./actions";
+import { deleteMediaAction, retryMetadataAction, updateMediaAction } from "./actions";
 
 const statuses: Array<[string, MediaStatus | ""]> = [["All", ""], ["Watching / Reading", "IN_PROGRESS"], ["Completed", "COMPLETED"], ["On hold", "ON_HOLD"], ["Dropped", "DROPPED"], ["Planned", "PLANNED"]];
 const types: Array<[string, MediaType | ""]> = [["All types", ""], ["Anime", "ANIME"], ["Movies", "MOVIE"], ["Series", "SERIES"], ["Books", "BOOK"]];
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ status?: string; type?: string; q?: string; error?: string }> }) {
   const user = await requireUser();
+  scheduleMediaEnrichment();
   const params = await searchParams;
   const status = isMediaStatus(params.status) ? params.status : undefined;
   const type = isMediaType(params.type) ? params.type : undefined;
@@ -26,7 +28,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
     <form className="filters" method="get"><input name="q" defaultValue={params.q ?? ""} placeholder="Search your list" /><select name="status" defaultValue={status ?? ""}>{statuses.map(([label, value]) => <option key={value} value={value}>{label}</option>)}</select><select name="type" defaultValue={type ?? ""}>{types.map(([label, value]) => <option key={value} value={value}>{label}</option>)}</select><button type="submit">Filter</button></form>
     <div className="mediaGrid">{items.map((item) => { const time = consumedMinutes({ type: item.type, runtimeMinutes: item.runtimeMinutes, progressCurrent: item.progressCurrent, progressTotal: item.progressTotal, status: item.status, overrideMinutes: item.timeSpentOverrideMinutes }); return <article className="card mediaCard" key={item.userMediaId}>
       {item.coverUrl ? <Image className="cover" src={item.coverUrl} alt="" width={84} height={118} /> : <div className="cover placeholder">{item.type}</div>}
-      <div className="grow"><div className="mediaTitle"><h2>{item.title}</h2><span className="badge">{item.type}</span></div><p className="muted">{item.year ?? "year ?"} · <a href={externalMediaUrl(item.source, item.externalId, item.externalSubId)} target="_blank" rel="noreferrer">{item.source}</a></p><p><strong>{labelStatus(item.status)}</strong>{item.score != null ? ` · ${item.score}/10` : ""}</p><p className="muted">Progress {item.progressCurrent}{item.progressTotal != null ? ` / ${item.progressTotal}` : ""} · Time {formatMinutes(time)}</p>{item.notes && <p>{item.notes}</p>}
+      <div className="grow"><div className="mediaTitle"><h2>{item.title}</h2><span className="badge">{item.type}</span></div><p className="muted">{item.year ?? "year ?"} · <a href={externalMediaUrl(item.source, item.externalId, item.externalSubId)} target="_blank" rel="noreferrer">{item.source}</a></p>{item.metadataStatus === "PENDING" && <p className="muted">Metadata verification pending…</p>}{item.metadataStatus === "ERROR" && <div><p className="error">Metadata verification failed{item.metadataError ? `: ${item.metadataError}` : ""}</p><form action={retryMetadataAction}><input type="hidden" name="mediaId" value={item.mediaId}/><button type="submit">Retry metadata</button></form></div>}<p><strong>{labelStatus(item.status)}</strong>{item.score != null ? ` · ${item.score}/10` : ""}</p><p className="muted">Progress {item.progressCurrent}{item.progressTotal != null ? ` / ${item.progressTotal}` : ""} · Time {formatMinutes(time)}</p>{item.notes && <p>{item.notes}</p>}
       <details><summary>Edit</summary><form action={updateMediaAction} className="editForm"><input type="hidden" name="id" value={item.userMediaId}/><label>Status<select name="status" defaultValue={item.status}>{statuses.filter((x) => x[1]).map(([label,value]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Score<input name="score" type="number" min="0" max="10" defaultValue={item.score ?? ""}/></label><label>Progress<input name="progressCurrent" type="number" min="0" defaultValue={item.progressCurrent}/></label><label>Total<input name="progressTotal" type="number" min="0" defaultValue={item.progressTotal ?? ""}/></label><label className="wide">Notes<textarea name="notes" rows={3} defaultValue={item.notes ?? ""}/></label><label>Manual time (minutes)<input name="timeSpentOverrideMinutes" type="number" min="0" defaultValue={item.timeSpentOverrideMinutes ?? ""}/></label><button type="submit">Save</button></form><form action={deleteMediaAction}><input type="hidden" name="id" value={item.userMediaId}/><button className="danger" type="submit">Remove from list</button></form></details></div>
     </article>; })}</div>
     {!items.length && <div className="empty"><p>No positions match these filters.</p><Link href="/media/new">Add your first one</Link></div>}
