@@ -7,6 +7,9 @@ export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 export const EXTERNAL_SOURCES = ["ANILIST", "TMDB", "OPENLIBRARY"] as const;
 export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
 
+export const METADATA_STATUSES = ["PENDING", "READY", "ERROR"] as const;
+export type MetadataStatus = (typeof METADATA_STATUSES)[number];
+
 export type MediaIdentity = {
   source: ExternalSource;
   externalId: string;
