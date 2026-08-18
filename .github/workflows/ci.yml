@@ -29,6 +29,24 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  digest_probe:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to GHCR read-only
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Read published digest
+        run: |
+          image='ghcr.io/karle0wne/media-list:5b65d511dfb9b854bf0a0004c8021dffc9ae0189'
+          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+          echo "PUBLISHED_IMAGE=ghcr.io/karle0wne/media-list@$digest"
+
   publish:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
