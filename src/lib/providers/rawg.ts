@@ -22,9 +22,9 @@ export async function searchRawgGames(query: string, limit = 10): Promise<MediaC
   return result.results.slice(0, limit).map(candidate);
 }
 
-export async function getRawgGame(id: string): Promise<MediaCandidate | null> {
-  if (!/^\d+$/.test(id)) return null;
-  try { return candidate(await rawg<RawgGame>(`/games/${id}`)); }
+export async function getRawgGame(idOrSlug: string): Promise<MediaCandidate | null> {
+  if (!/^(?:\d+|[a-z0-9-]+)$/.test(idOrSlug)) return null;
+  try { return candidate(await rawg<RawgGame>(`/games/${idOrSlug}`)); }
   catch { return null; }
 }
 
