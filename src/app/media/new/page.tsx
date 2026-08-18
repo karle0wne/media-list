@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { ProviderCover } from "@/components/provider-cover";
 import { requireSessionToken, requireUser } from "@/lib/auth";
 import { encodeCandidateToken } from "@/lib/candidate-token";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
@@ -44,13 +44,13 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
 
     <div className="results">
       {shows.map((show) => <article className="card result" key={show.externalId}>
-        {show.coverUrl && <Image src={show.coverUrl} alt="" width={84} height={118} />}
+        {show.coverUrl && <ProviderCover src={show.coverUrl} width={84} height={118} />}
         <div className="grow"><h2>{show.title}</h2><p className="muted">TV series · {show.year ?? "year ?"} · TMDB</p>{show.originalTitle && show.originalTitle !== show.title && <p>{show.originalTitle}</p>}</div>
         <Link className="button" href={`/media/new?type=SERIES&q=${encodeURIComponent(q)}&show=${encodeURIComponent(show.externalId)}`}>Choose season</Link>
       </article>)}
 
       {results.map((item) => <article className="card result" key={item.key}>
-        {item.coverUrl && <Image src={item.coverUrl} alt="" width={84} height={118} />}
+        {item.coverUrl && <ProviderCover src={item.coverUrl} width={84} height={118} />}
         <div className="grow"><h2>{item.title}</h2><p className="muted">{item.type} · {item.year ?? "year ?"} · {item.source}</p>{item.originalTitle && item.originalTitle !== item.title && <p>{item.originalTitle}</p>}</div>
         <form action={addCandidateAction}><input type="hidden" name="candidateToken" value={encodeCandidateToken(item, sessionToken)}/><button type="submit">Add</button></form>
       </article>)}
