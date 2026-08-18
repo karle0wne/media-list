@@ -6,6 +6,7 @@ import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import { getSeriesSeasons, searchMediaByType, searchSeriesShows } from "@/lib/providers";
 import type { MediaCandidate, MediaType } from "@/lib/types";
 import { isMediaType } from "@/lib/user-media";
+import type { TmdbShowCandidate } from "@/lib/providers/tmdb";
 import { addCandidateAction } from "../../actions";
 
 const categories: Array<[MediaType, string]> = [["ANIME", "Anime / donghua"], ["MOVIE", "Movies"], ["SERIES", "TV series"], ["BOOK", "Books"]];
@@ -18,13 +19,21 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
   const type: MediaType = isMediaType(params.type) ? params.type : "ANIME";
   const q = params.q?.trim() ?? "";
   const showId = type === "SERIES" ? params.show?.trim() ?? "" : "";
-  const results: MediaCandidate[] = q && type !== "SERIES" ? await searchMediaByType(type, q) : showId ? await getSeriesSeasons(showId) : [];
-  const shows = q && type === "SERIES" && !showId ? await searchSeriesShows(q) : [];
+  let results: MediaCandidate[] = [];
+  let shows: TmdbShowCandidate[] = [];
+  let searchError = params.error ?? "";
+  try {
+    if (q && type !== "SERIES") results = await searchMediaByType(type, q);
+    else if (showId) results = await getSeriesSeasons(showId);
+    else if (q && type === "SERIES") shows = await searchSeriesShows(q);
+  } catch (error) {
+    searchError = error instanceof Error ? error.message : "Search provider is temporarily unavailable";
+  }
 
   return <section>
     <h1>Add media</h1>
     <p className="muted">Choose a category first so search only waits for the relevant provider. After you select the exact work or season, Add is saved locally first and provider metadata is verified after the response.</p>
-    {params.error && <p className="error">{params.error}</p>}
+    {searchError && <p className="error">{searchError}</p>}
     <form method="get" className="searchbar">
       <select name="type" defaultValue={type} aria-label="Media category">{categories.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
       <input name="q" defaultValue={q} placeholder={placeholder(type)} autoFocus/>
@@ -46,8 +55,8 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
         <form action={addCandidateAction}><input type="hidden" name="candidateToken" value={encodeCandidateToken(item, sessionToken)}/><button type="submit">Add</button></form>
       </article>)}
 
-      {q && !showId && !results.length && !shows.length && <p>No candidates found in {label(type)}.</p>}
-      {showId && !results.length && <p>No seasons found for this series.</p>}
+      {!searchError && q && !showId && !results.length && !shows.length && <p>No candidates found in {label(type)}.</p>}
+      {!searchError && showId && !results.length && <p>No seasons found for this series.</p>}
     </div>
   </section>;
 }
