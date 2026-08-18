@@ -128,31 +128,25 @@ For clean data, paste one title or provider URL per line. For arbitrary Word/Exc
 
 `npm run maintenance` runs cleanup plus stale TMDB metadata refresh. A production control plane can schedule this command without owning its implementation.
 
-## S3 / Cloudflare R2 backups
+## Backup and restore
 
-Configure the `S3_*` variables, then run:
+The recovery model intentionally has no application-managed backup history. Configure the `S3_*` variables and run:
 
 ```bash
 docker compose exec app npm run backup
 ```
 
-The backup command makes a transactionally consistent SQLite snapshot. All application-owned objects live below `S3_PREFIX` (default `media-list/`) with this layout:
+`npm run backup` creates a transactionally consistent SQLite snapshot with `VACUUM INTO`, verifies it with `PRAGMA quick_check`, and uploads it to one fixed recovery object:
 
 ```text
-media-list/latest/media-list.db       latest successful state; never pruned by the app
-media-list/snapshots/<timestamp>.db   rolling history, default 90 days
-media-list/monthly/<yyyy-mm>.db       one long-term point per month, default 24 months
+<S3_PREFIX>latest/media-list.db
 ```
 
-The prefix is configurable; the layout above shows the default. Retention is applied before a new upload. The timestamped snapshot is uploaded first, the monthly point is created when needed, and `latest` is updated last. Snapshot/monthly retention is configurable through `S3_SNAPSHOT_RETENTION_DAYS` and `S3_MONTHLY_RETENTION_MONTHS`.
+Each successful backup replaces that object. There are no timestamped snapshots, monthly copies, retention rules or application-side storage-budget policy. If a deployment needs rollback protection, that is a separate short-lived local snapshot described below rather than remote backup history.
 
-Backup storage has an optional provider-neutral budget guard. The command totals current object sizes under `S3_PREFIX` using the standard S3 `ListObjectsV2` API, accounts for retention and planned overwrites, and prints projected usage on every run. `S3_STORAGE_WARN_GIB` emits a warning when the projected size reaches a soft threshold. `S3_STORAGE_HARD_LIMIT_GIB` aborts before uploading new objects when the projected size would exceed the hard threshold. Both are optional and are deliberately not tied to Cloudflare pricing; set them according to the S3-compatible provider and account being used.
+The admin page records the time of the last successful remote backup.
 
-Because the application already keeps timestamped and monthly history, provider-side bucket versioning is unnecessary. If versioning is enabled externally, non-current object versions may consume storage that `ListObjectsV2` does not include in this lightweight guard.
-
-The admin page shows the last successful backup recorded by the application.
-
-Restore defaults to `latest/media-list.db` below `S3_PREFIX`:
+Remote restore always restores that same recovery object. Stop the normal application before restoring:
 
 ```bash
 docker compose stop app
@@ -160,16 +154,16 @@ docker compose run --rm app npm run restore
 docker compose up -d app
 ```
 
-A specific object key can be supplied as the final argument.
+The downloaded SQLite file is validated before it atomically replaces the database. In managed disaster recovery the control plane invokes the same application-owned restore command before the first normal application startup.
 
-For transactional deployments the runtime contract also exposes:
+Transactional deployment rollback is deliberately separate from disaster recovery. The runtime contract exposes:
 
 ```bash
 npm run snapshot -- /data/pre-deploy.db
 npm run restore:local -- /data/pre-deploy.db
 ```
 
-These are application-owned state hooks used by an external control plane for DB-aware rollback; the control plane does not duplicate SQLite file logic.
+`pre-deploy.db` exists only for the current deployment transaction and is removed after success or rollback. It is not durable backup history. The control plane decides when to invoke these commands but does not duplicate SQLite snapshot or restore logic.
 
 ## Health / revision contract
 
