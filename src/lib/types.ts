@@ -1,10 +1,10 @@
-export const MEDIA_TYPES = ["ANIME", "MOVIE", "SERIES", "BOOK"] as const;
+export const MEDIA_TYPES = ["ANIME", "MOVIE", "SERIES", "BOOK", "GAME"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
 
 export const MEDIA_STATUSES = ["PLANNED", "IN_PROGRESS", "COMPLETED", "ON_HOLD", "DROPPED"] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 
-export const EXTERNAL_SOURCES = ["ANILIST", "TMDB", "OPENLIBRARY"] as const;
+export const EXTERNAL_SOURCES = ["ANILIST", "TMDB", "OPENLIBRARY", "RAWG"] as const;
 export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
 
 export const METADATA_STATUSES = ["PENDING", "READY", "ERROR"] as const;
