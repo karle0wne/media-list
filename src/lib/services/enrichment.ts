@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
 import { resolveExact } from "../providers";
@@ -21,7 +21,7 @@ export async function enrichMediaMetadata(db: AppDb, mediaId: string, resolver: 
       if (candidate.type !== item.type) throw new Error(`Provider item type is ${candidate.type}, expected ${item.type}`);
       await refreshMediaMetadata(db, item.id, candidate);
       const progressTotal = defaultProgressTotal(candidate);
-      if (progressTotal != null) await db.update(userMedia).set({ progressTotal }).where(eq(userMedia.mediaId, item.id) && isNull(userMedia.progressTotal));
+      if (progressTotal != null) await db.update(userMedia).set({ progressTotal }).where(and(eq(userMedia.mediaId, item.id), isNull(userMedia.progressTotal)));
       return { state: "ready" as const };
     } catch (error) {
       const message = (error instanceof Error ? error.message : "Metadata enrichment failed").slice(0, 500);
