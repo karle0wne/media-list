@@ -42,7 +42,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.15.0'
-          cache: npm
       - run: npm install
       - name: Generate and commit canonical Drizzle migration
         run: |
