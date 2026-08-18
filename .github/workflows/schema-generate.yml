@@ -22,6 +22,7 @@ jobs:
       - run: npm install
       - name: Generate canonical Drizzle migration
         run: |
+          # Replace the temporary handwritten migration with Drizzle's canonical output.
           rm -rf drizzle/20260819013000_fast_media_add
           npx drizzle-kit generate --name fast_media_add
           git config user.name github-actions[bot]
