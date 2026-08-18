@@ -1,13 +1,14 @@
 "use server";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/db";
-import { createSession, deleteCurrentSession, requireAdmin, requireUser } from "@/lib/auth";
+import { createSession, deleteCurrentSession, requireAdmin, requireSessionToken, requireUser } from "@/lib/auth";
+import { decodeCandidateToken } from "@/lib/candidate-token";
+import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import { authenticate, createInvite, registerWithInvite, setUserActive } from "@/lib/services/users";
-import { deleteUserMedia, resolveAndAddMedia, updateUserMedia } from "@/lib/services/media";
-import { parseCandidateKey } from "@/lib/providers";
+import { addSelectedMediaToUser, deleteUserMedia, retryMediaMetadata, updateUserMedia } from "@/lib/services/media";
 import { createMigrationImport, createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
-import { parseMediaType, parseUserMediaInput } from "@/lib/user-media";
+import { parseUserMediaInput } from "@/lib/user-media";
 
 function str(form: FormData, key: string) { const value = form.get(key); return typeof value === "string" ? value.trim() : ""; }
 function goError(path: string, error: unknown): never { const message = error instanceof Error ? error.message : "Unexpected error"; redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`); }
@@ -21,12 +22,21 @@ export async function toggleUserAction(form: FormData) { const admin = await req
 export async function addCandidateAction(form: FormData) {
   const user = await requireUser();
   try {
-    const parsed = parseCandidateKey(str(form, "candidateKey"));
-    if (!parsed) throw new Error("Invalid candidate");
-    await resolveAndAddMedia(getDatabase().db, user.id, { ...parsed, type: parseMediaType(str(form, "type")) });
+    const sessionToken = await requireSessionToken();
+    const candidate = decodeCandidateToken(str(form, "candidateToken"), sessionToken);
+    if (!candidate) throw new Error("Candidate expired or was changed; search again");
+    const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
+    if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
   } catch (error) {
     goError("/media/new", error);
   }
+  redirect("/");
+}
+
+export async function retryMetadataAction(form: FormData) {
+  const user = await requireUser();
+  const mediaId = str(form, "mediaId");
+  if (await retryMediaMetadata(getDatabase().db, user.id, mediaId)) scheduleMediaEnrichment(mediaId);
   redirect("/");
 }
 
