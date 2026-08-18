@@ -6,9 +6,11 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   verify:
+    if: github.head_ref != 'diag/resolve-category-image'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -28,6 +30,22 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  resolve_image:
+    if: github.head_ref == 'diag/resolve-category-image'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Log in to GHCR read-only
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Resolve immutable digest
+        run: |
+          image="ghcr.io/karle0wne/media-list:a0430fcc4d4f6f79aa6185af882f39faa65e0423"
+          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+          echo "RESOLVED_IMAGE=ghcr.io/karle0wne/media-list@$digest"
 
   publish:
     needs: verify
