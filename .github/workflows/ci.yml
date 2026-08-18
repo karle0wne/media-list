@@ -29,6 +29,35 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  generate_fast_add_migration:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/fast-media-add'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.15.0'
+          cache: npm
+      - run: npm install
+      - name: Generate and commit canonical Drizzle migration
+        run: |
+          rm -rf drizzle/20260819013000_fast_media_add
+          npx drizzle-kit generate --name fast_media_add
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add drizzle
+          if git diff --cached --quiet; then
+            echo 'Drizzle produced no schema diff' >&2
+            exit 1
+          fi
+          git commit -m 'db: generate fast media add migration'
+          git push origin HEAD:${GITHUB_HEAD_REF}
+
   publish:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
