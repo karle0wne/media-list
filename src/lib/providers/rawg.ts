@@ -1,10 +1,10 @@
 import type { MediaCandidate } from "../types";
 
 const API = "https://api.rawg.io/api";
+const COVER_HOST = "media.rawg.io";
 
 type RawgGame = {
   id: number;
-  slug?: string;
   name: string;
   name_original?: string | null;
   released?: string | null;
@@ -22,9 +22,9 @@ export async function searchRawgGames(query: string, limit = 10): Promise<MediaC
   return result.results.slice(0, limit).map(candidate);
 }
 
-export async function getRawgGame(idOrSlug: string): Promise<MediaCandidate | null> {
-  if (!/^(?:\d+|[a-z0-9-]+)$/.test(idOrSlug)) return null;
-  try { return candidate(await rawg<RawgGame>(`/games/${idOrSlug}`)); }
+export async function getRawgGame(id: string): Promise<MediaCandidate | null> {
+  if (!/^\d+$/.test(id)) return null;
+  try { return candidate(await rawg<RawgGame>(`/games/${id}`)); }
   catch { return null; }
 }
 
@@ -50,11 +50,17 @@ function candidate(item: RawgGame): MediaCandidate {
     title: item.name,
     originalTitle: item.name_original || null,
     year: year(item.released),
-    coverUrl: httpsUrl(item.background_image),
+    coverUrl: coverUrl(item.background_image),
     description: item.description_raw || stripHtml(item.description) || null,
   };
 }
 
 function year(date?: string | null) { const match = date?.match(/^(\d{4})/); return match ? Number(match[1]) : null; }
-function httpsUrl(value?: string | null) { if (!value) return null; try { const url = new URL(value); return url.protocol === "https:" ? url.toString() : null; } catch { return null; } }
+function coverUrl(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === COVER_HOST && url.pathname.startsWith("/media/") ? url.toString() : null;
+  } catch { return null; }
+}
 function stripHtml(value?: string | null) { return value?.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() || null; }
