@@ -10,12 +10,7 @@ export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
 export const METADATA_STATUSES = ["PENDING", "READY", "ERROR"] as const;
 export type MetadataStatus = (typeof METADATA_STATUSES)[number];
 
-export type MediaIdentity = {
-  source: ExternalSource;
-  externalId: string;
-  externalSubId: string;
-  type: MediaType;
-};
+export type MediaIdentity = { source: ExternalSource; externalId: string; externalSubId: string; type: MediaType };
 
 export type MediaCandidate = MediaIdentity & {
   key: string;
@@ -23,7 +18,6 @@ export type MediaCandidate = MediaIdentity & {
   originalTitle?: string | null;
   countryCode?: string | null;
   year?: number | null;
-  runtimeMinutes?: number | null;
   episodeCount?: number | null;
   pageCount?: number | null;
   coverUrl?: string | null;
@@ -36,5 +30,4 @@ export type ImportedUserData = {
   progressCurrent?: number;
   progressTotal?: number | null;
   notes?: string | null;
-  timeSpentOverrideMinutes?: number | null;
 };

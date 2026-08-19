@@ -25,4 +25,23 @@ const command = process.platform === "win32" ? "npx.cmd" : "npx";
 const result = spawnSync(command, ["drizzle-kit", "migrate"], { stdio: "inherit", env: process.env });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
+
+removeLegacyTimeColumns(dbPath);
 console.log("Database migrations applied.");
+
+function removeLegacyTimeColumns(path: string) {
+  const db = new DatabaseSync(path);
+  try {
+    dropColumnIfPresent(db, "media", "runtime_minutes");
+    dropColumnIfPresent(db, "user_media", "time_spent_override_minutes");
+  } finally {
+    db.close();
+  }
+}
+
+function dropColumnIfPresent(db: DatabaseSync, table: string, column: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((item) => item.name === column)) return;
+  db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+  console.log(`Removed legacy ${table}.${column}.`);
+}
