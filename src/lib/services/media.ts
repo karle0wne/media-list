@@ -82,7 +82,17 @@ export async function retryMediaMetadata(db: AppDb, userId: string, mediaId: str
   return true;
 }
 
-export async function updateUserMedia(db: AppDb, userId: string, id: string, values: { status: MediaStatus; score: number | null; progressCurrent: number; progressTotal: number | null; notes: string | null; timeSpentOverrideMinutes: number | null; }) {
+type UserMediaUpdate = {
+  status: MediaStatus;
+  score: number | null;
+  progressCurrent: number;
+  progressTotal: number | null;
+  notes: string | null;
+  timeSpentOverrideMinutes: number | null;
+};
+
+export async function updateUserMedia(db: AppDb, userId: string, id: string, values: Partial<UserMediaUpdate>) {
+  if (!Object.keys(values).length) return;
   await db.update(userMedia).set({ ...values, updatedAt: new Date() }).where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)));
 }
 

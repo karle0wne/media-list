@@ -31,10 +31,21 @@ Each list entry has status (`PLANNED`, `IN_PROGRESS`, `COMPLETED`, `ON_HOLD`, `D
 
 Video watch time is derived from provider runtime and progress when possible. For books, pages are the primary progress metric and actual reading time is optional/manual because page count does not define reading duration. For games, provider-reported average playtime is never treated as the user's time; played time is user-owned and recorded through the manual time field.
 
+## Library UI
+
+The primary library is list-centric rather than a card grid. Its information hierarchy follows the useful parts of the supplied MyAnimeList reference without attempting a pixel clone:
+
+- status tabs are the primary navigation (`All`, `In progress`, `Completed`, `On hold`, `Dropped`, `Planned`);
+- title/cover are the dominant row identity, followed by status, score, progress/time and media type;
+- status and score have focused row-level updates that change only that field and must not overwrite notes, progress, time or other user state;
+- notes, manual time, detailed progress and destructive removal remain behind an explicit row edit surface;
+- narrow screens reflow rows rather than requiring a desktop-width table;
+- Catppuccin is the primary theme family, with Mocha as the default and Latte plus conventional soft dark/light alternatives. Theme selection is presentation state only and does not belong in the application database.
+
 ## Entry paths
 
 1. Manual canonical add: choose category -> search only its canonical provider -> explicit exact choice (for TV: show -> season) -> immediate local save -> durable provider verification/enrichment. Search-result metadata is provisional until verification reaches `READY`; failures become visible `ERROR` state with retry.
-2. Canonical CSV: strict source/id based round-trip import/export with synchronous provider revalidation.
+2. Canonical CSV: strict source/id based round-trip export/import with synchronous provider revalidation.
 3. Quick import: paste titles or supported provider URLs -> resolve candidates across applicable configured providers -> review -> save. RAWG game URLs are not accepted until a documented exact URL-to-ID resolver exists; game titles may still produce RAWG candidates when the provider is configured.
 4. LLM migration: arbitrary legacy document is converted externally into migration CSV -> media-list validates/resolves -> review -> save.
 
