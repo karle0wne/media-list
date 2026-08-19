@@ -3,20 +3,23 @@ import { ProviderCover } from "@/components/provider-cover";
 import { requireSessionToken, requireUser } from "@/lib/auth";
 import { encodeCandidateToken } from "@/lib/candidate-token";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
-import { getSeriesSeasons, searchMediaByType, searchSeriesShows } from "@/lib/providers";
+import { getSeriesSeasons, rawgConfigured, searchMediaByType, searchSeriesShows } from "@/lib/providers";
 import type { MediaCandidate, MediaType } from "@/lib/types";
 import { isMediaType } from "@/lib/user-media";
 import type { TmdbShowCandidate } from "@/lib/providers/tmdb";
 import { addCandidateAction } from "../../actions";
 
-const categories: Array<[MediaType, string]> = [["ANIME", "Anime / donghua"], ["MOVIE", "Movies"], ["SERIES", "TV series"], ["BOOK", "Books"]];
+const baseCategories: Array<[MediaType, string]> = [["ANIME", "Anime / donghua"], ["MOVIE", "Movies"], ["SERIES", "TV series"], ["BOOK", "Books"]];
 
 export default async function AddPage({ searchParams }: { searchParams: Promise<{ type?: string; q?: string; show?: string; error?: string }> }) {
   await requireUser();
   const sessionToken = await requireSessionToken();
   scheduleMediaEnrichment();
   const params = await searchParams;
-  const type: MediaType = isMediaType(params.type) ? params.type : "ANIME";
+  const gamesEnabled = rawgConfigured();
+  const categories: Array<[MediaType, string]> = gamesEnabled ? [...baseCategories, ["GAME", "Games"]] : baseCategories;
+  const requestedType = isMediaType(params.type) ? params.type : "ANIME";
+  const type: MediaType = requestedType === "GAME" && !gamesEnabled ? "ANIME" : requestedType;
   const q = params.q?.trim() ?? "";
   const showId = type === "SERIES" ? params.show?.trim() ?? "" : "";
   let results: MediaCandidate[] = [];
@@ -33,6 +36,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
   return <section>
     <h1>Add media</h1>
     <p className="muted">Choose a category first so search only waits for the relevant provider. After you select the exact work or season, Add is saved locally first and provider metadata is verified after the response.</p>
+    {!gamesEnabled && <p className="muted">Game search becomes available when this installation configures a RAWG API key.</p>}
     {searchError && <p className="error">{searchError}</p>}
     <form method="get" className="searchbar">
       <select name="type" defaultValue={type} aria-label="Media category">{categories.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
@@ -51,7 +55,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
 
       {results.map((item) => <article className="card result" key={item.key}>
         {item.coverUrl && <ProviderCover src={item.coverUrl} width={84} height={118} />}
-        <div className="grow"><h2>{item.title}</h2><p className="muted">{item.type} · {item.year ?? "year ?"} · {item.source}</p>{item.originalTitle && item.originalTitle !== item.title && <p>{item.originalTitle}</p>}</div>
+        <div className="grow"><h2>{item.title}</h2><p className="muted">{item.type} · {item.year ?? "year ?"} · {item.source === "RAWG" ? <a href="https://rawg.io/" target="_blank" rel="noreferrer">RAWG</a> : item.source}</p>{item.originalTitle && item.originalTitle !== item.title && <p>{item.originalTitle}</p>}</div>
         <form action={addCandidateAction}><input type="hidden" name="candidateToken" value={encodeCandidateToken(item, sessionToken)}/><button type="submit">Add</button></form>
       </article>)}
 
@@ -61,5 +65,5 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
   </section>;
 }
 
-function placeholder(type: MediaType) { return type === "BOOK" ? "Book title" : type === "MOVIE" ? "Movie title" : type === "SERIES" ? "Series title" : "Anime title in any language"; }
-function label(type: MediaType) { return categories.find(([value]) => value === type)?.[1] ?? type; }
+function placeholder(type: MediaType) { return type === "BOOK" ? "Book title" : type === "MOVIE" ? "Movie title" : type === "SERIES" ? "Series title" : type === "GAME" ? "Game title" : "Anime title in any language"; }
+function label(type: MediaType) { return ([...baseCategories, ["GAME", "Games"]] as Array<[MediaType, string]>).find(([value]) => value === type)?.[1] ?? type; }

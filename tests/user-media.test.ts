@@ -29,7 +29,9 @@ test("user media parser rejects values that used to be silently normalized", () 
 
 test("media identity enums share one parser contract", () => {
   assert.equal(parseMediaType(" SERIES "), "SERIES");
+  assert.equal(parseMediaType("GAME"), "GAME");
   assert.equal(parseExternalSource("TMDB"), "TMDB");
+  assert.equal(parseExternalSource("RAWG"), "RAWG");
   assert.throws(() => parseMediaType("VIDEO"), /unsupported type/);
   assert.throws(() => parseExternalSource("IMDB"), /unsupported external_source/);
 });
