@@ -15,6 +15,7 @@ function run(script: string, args: string[] = [], extraEnv: Record<string, strin
   delete env.S3_ACCESS_KEY_ID;
   delete env.S3_SECRET_ACCESS_KEY;
   delete env.TMDB_API_TOKEN;
+  delete env.RAWG_API_KEY;
   return spawnSync(tsx, [`scripts/${script}.ts`, ...args], { encoding: "utf8", env });
 }
 
@@ -35,6 +36,10 @@ test("operational CLI entrypoints execute through the tsx binary used in product
     const snapshotResult = run("snapshot", [snapshot], { DATABASE_PATH: database });
     assertNoTransformFailure(snapshotResult, "snapshot");
     assert.equal(snapshotResult.status, 0, snapshotResult.stderr);
+
+    const providerSmokeResult = run("provider-smoke", ["--check-runtime"]);
+    assertNoTransformFailure(providerSmokeResult, "provider-smoke");
+    assert.equal(providerSmokeResult.status, 0, providerSmokeResult.stderr);
 
     const cases: Array<[string, string[]]> = [
       ["backup", []],
