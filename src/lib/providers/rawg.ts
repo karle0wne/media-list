@@ -1,4 +1,5 @@
 import type { MediaCandidate } from "../types";
+import { providerFetch } from "./http";
 
 const API = "https://api.rawg.io/api";
 const COVER_HOST = "media.rawg.io";
@@ -34,7 +35,7 @@ async function rawg<T>(path: string, params: Record<string, string> = {}): Promi
   const url = new URL(`${API}${path}`);
   url.searchParams.set("key", key);
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
-  const response = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store" });
+  const response = await providerFetch(url, { headers: { accept: "application/json" }, cache: "no-store" });
   if (response.status === 404) throw new Error("RAWG game not found");
   if (!response.ok) throw new Error(`RAWG request failed: ${response.status}`);
   return response.json() as Promise<T>;

@@ -11,6 +11,7 @@
 - Canonical CSV is deterministic and IDs are revalidated against providers on import.
 - Quick/LLM imports are staging workflows. Fuzzy/multilingual matching may suggest candidates but never writes an ambiguous result without review.
 - Manual search is category-first. Anime waits only for AniList (plus localized fallback when necessary), movies only for TMDB movie search, books only for Open Library, games only for RAWG, and TV search first finds shows then loads seasons only for the selected show. Unrelated providers must not add latency to manual search.
+- All server-side metadata-provider HTTP requests have an application-owned deadline. A stalled provider must fail as an observable search/enrichment error rather than hold a request until an operating-system/network timeout.
 - A manual Add must not wait for a second provider round trip after the user has selected an exact provider result. The selected identity is persisted locally first; exact metadata verification/enrichment is durable asynchronous work.
 - Pending metadata work is persisted in SQLite. Browser disconnects, reloads and process restarts must not silently lose it. Provider failure leaves the list item visible with retryable error state rather than undoing the add.
 - Provider cover URLs are metadata. Poster/image binaries are not application state and are not included in SQLite backups. Provider covers are delivered directly from provider CDNs rather than proxied through the VPS image optimizer.
