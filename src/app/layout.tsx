@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { currentUser } from "@/lib/auth";
+import { rawgConfigured } from "@/lib/providers/rawg";
 import { logoutAction } from "./actions";
 import "./globals.css";
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = { title: "media-list", description: "Small sel
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await currentUser();
+  const showRawgAttribution = rawgConfigured();
   return (
     <html lang="en">
       <body>
@@ -19,6 +21,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           </nav>
         </header>
         <main className="container">{children}</main>
+        {showRawgAttribution && <footer className="container muted"><a href="https://rawg.io" target="_blank" rel="noreferrer">Game data by RAWG</a></footer>}
       </body>
     </html>
   );
