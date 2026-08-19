@@ -26,3 +26,9 @@ export function normalizeS3Prefix(value: string) {
   const trimmed = value.replace(/^\/+/, "").replace(/\/+$/, "");
   return trimmed ? `${trimmed}/` : "";
 }
+
+export function isMissingS3Object(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; Code?: unknown; code?: unknown };
+  return candidate.name === "NoSuchKey" || candidate.Code === "NoSuchKey" || candidate.code === "NoSuchKey";
+}
