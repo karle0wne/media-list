@@ -14,7 +14,7 @@
 - All server-side metadata-provider HTTP requests have an application-owned deadline. A stalled provider must fail as an observable search/enrichment error rather than hold a request until an operating-system/network timeout.
 - A manual Add must not wait for a second provider round trip after the user has selected an exact provider result. The selected identity is persisted locally first; exact metadata verification/enrichment is durable asynchronous work.
 - Pending metadata work is persisted in SQLite. Browser disconnects, reloads and process restarts must not silently lose it. Provider failure leaves the list item visible with retryable error state rather than undoing the add.
-- Provider cover URLs are metadata. Poster/image binaries are not application state and are not included in SQLite backups. Provider covers are delivered directly from provider CDNs rather than proxied through the VPS image optimizer.
+- Provider cover URLs are metadata. Poster/image binaries are not application state and are not included in SQLite backups. Provider covers are delivered directly from provider CDNs rather than proxied through the VPS image optimizer, and provider-supported size variants should be close to the rendered list size rather than always selecting the largest image.
 - Production data, SQLite files, backups, CSV exports, credentials and tokens never belong in Git.
 - The application must remain viable on a single small VPS; no Redis, PostgreSQL, external queue or microservices are required for the MVP.
 
