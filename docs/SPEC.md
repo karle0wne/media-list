@@ -1,53 +1,48 @@
-# media-list MVP specification
+# media-list specification
 
-`media-list` is a small invite-only, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally designed for one low-resource VPS and a few known users.
+`media-list` is a small invite-only, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally closer to an interactive personal list than a content platform: one low-resource VPS, SQLite, a few known users, and no heavy data pipeline.
 
 ## Invariants
 
-- Media identity is provider identity, not title similarity: `external_source + external_id + external_sub_id`.
-- Shared canonical media metadata and per-user state are separate. A user must never read or mutate another user's state.
-- TV seasons are separate positions. TMDB series id plus `season:N` is the canonical identity of a season.
-- Registration is invite-only and guarded by `MAX_USERS`; there is no public sign-up.
-- Canonical CSV is deterministic and IDs are revalidated against providers on import.
-- Quick/LLM imports are staging workflows. Fuzzy/multilingual matching may suggest candidates but never writes an ambiguous result without review.
-- Manual search is category-first. Anime waits only for AniList (plus localized fallback when necessary), movies only for TMDB movie search, books only for Open Library, games only for RAWG, and TV search first finds shows then loads seasons only for the selected show. Unrelated providers must not add latency to manual search.
-- All server-side metadata-provider HTTP requests have an application-owned deadline. A stalled provider must fail as an observable search/enrichment error rather than hold a request until an operating-system/network timeout.
-- A manual Add must not wait for a second provider round trip after the user has selected an exact provider result. The selected identity is persisted locally first; exact metadata verification/enrichment is durable asynchronous work.
-- Pending metadata work is persisted in SQLite. Browser disconnects, reloads and process restarts must not silently lose it. Provider failure leaves the list item visible with retryable error state rather than undoing the add.
-- Provider cover URLs are metadata. Poster/image binaries are not application state and are not included in SQLite backups. Provider covers are delivered directly from provider CDNs rather than proxied through the VPS image optimizer, and provider-supported size variants should be close to the rendered list size rather than always selecting the largest image.
-- Production data, SQLite files, backups, CSV exports, credentials and tokens never belong in Git.
-- The application must remain viable on a single small VPS; no Redis, PostgreSQL, external queue or microservices are required for the MVP.
+- The saved list is the product. External metadata is auxiliary: provider outage, timeout, or rate limit must not make existing list state unusable.
+- Media identity is `external_source + external_id + external_sub_id`, not title similarity.
+- Shared canonical media metadata and per-user state are separate; one user cannot read or mutate another user's state.
+- TV seasons are separate positions identified by TMDB series id plus `season:N`.
+- Registration is invite-only and guarded by `MAX_USERS`.
+- User state is status, score, medium-specific progress, and notes. Watch/play/reading time is not a shared domain field.
+- `COMPLETED` fills progress to the known total when a total exists.
+- Canonical CSV is deterministic and provider IDs are revalidated on import.
+- Quick Import is a staging workflow: fuzzy/multilingual matching suggests candidates but never commits an ambiguous result without review.
+- Manual search is category-first. Unrelated providers must not add latency to the normal Add path.
+- Provider HTTP calls have an application-owned deadline. HTTP 429 and temporary upstream failures are retry-later metadata failures, not reasons to retry in loops or block the saved list.
+- Manual Add is local-first: selecting a provider result persists identity/provisional metadata immediately; exact enrichment continues as durable SQLite state (`PENDING → READY` or `ERROR → Retry`).
+- Cover URLs are metadata; image bytes are not application state or backup data and load directly from provider CDNs.
+- The application remains viable on one small VPS. Redis, PostgreSQL, external queues, caches, and microservices are not required.
+- Production data, SQLite files, backups, exports, credentials, and tokens never belong in Git.
 
 ## Providers
 
-- Anime/donghua: AniList GraphQL. MAL URLs can be resolved through AniList's `idMal` lookup.
-- Movies and TV: TMDB. A TMDB API Read Access Token is required.
+- Anime/donghua: AniList GraphQL. MAL URLs resolve through AniList `idMal`.
+- Movies/TV: TMDB using `TMDB_API_TOKEN`.
 - Books: Open Library.
-- Games: RAWG. `RAWG_API_KEY` enables game search and exact numeric-ID revalidation. RAWG data/images are accompanied by a global active RAWG backlink while the provider is configured.
-- Cyrillic/localized anime fallback: Wikidata aliases may be used only after direct AniList search returns no candidates. Wikidata is only a resolver fallback, not canonical identity.
+- Games: RAWG when `RAWG_API_KEY` is configured. Search is fuzzy; exact `rawg.io/games/<slug>` URLs resolve through RAWG details and are normalized to numeric RAWG identity.
+- Wikidata: bounded Cyrillic/localization discovery only. Sparse Cyrillic AniList/RAWG results may be augmented with at most two English aliases; provider identity remains canonical.
 
-## User state
+Provider APIs are retained for exact stable identity, deterministic revalidation, TV season/episode structure, book page counts, provider URLs, and covers. Generic wiki data is not a substitute for those contracts.
 
-Each list entry has status (`PLANNED`, `IN_PROGRESS`, `COMPLETED`, `ON_HOLD`, `DROPPED`), score 0-10, progress, notes, and optional manual time override.
+`npm run providers:smoke` is an explicit live-provider integration probe. It is intentionally opt-in rather than automatic CI so routine verification does not spend API quota.
 
-Video watch time is derived from provider runtime and progress when possible. For books, pages are the primary progress metric and actual reading time is optional/manual because page count does not define reading duration. For games, provider-reported average playtime is never treated as the user's time; played time is user-owned and recorded through the manual time field.
+## Library interaction
 
-## Library UI
+Status tabs are primary navigation. Search stays visible; type/score/note filters, sorting, direction, and optional columns live in Settings. Sortable headers toggle ascending/descending order.
 
-The primary library is list-centric rather than a card grid. Its information hierarchy follows the useful parts of the supplied MyAnimeList reference without attempting a pixel clone:
+Each row uses `title → metadata → notes`. Status and score autosave on change. Clicking non-interactive row space opens one edit dialog for applicable user-owned fields. Row checkboxes enable user-scoped bulk removal. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
 
-- status tabs are the primary navigation (`All`, `In progress`, `Completed`, `On hold`, `Dropped`, `Planned`);
-- title/cover are the dominant row identity, followed by status, score, progress/time and media type;
-- status and score have focused row-level updates that change only that field and must not overwrite notes, progress, time or other user state;
-- notes, manual time, detailed progress and destructive removal remain behind an explicit row edit surface;
-- narrow screens reflow rows rather than requiring a desktop-width table;
-- Catppuccin is the primary theme family, with Mocha as the default and Latte plus conventional soft dark/light alternatives. Theme selection is presentation state only and does not belong in the application database.
+## Entry and export paths
 
-## Entry paths
+1. Manual Add: category → one canonical provider → exact choice (TV: show → season) → immediate local save → durable enrichment.
+2. Quick Import: one title or supported provider URL per line → bounded provider discovery → review → save. Exact RAWG URLs are supported through slug resolution.
+3. Canonical CSV: strict provider-ID round trip preserving status/score/progress/notes, with synchronous revalidation.
+4. Markdown export: human-readable grouped snapshot for reading or archival; it is not an import contract.
 
-1. Manual canonical add: choose category -> search only its canonical provider -> explicit exact choice (for TV: show -> season) -> immediate local save -> durable provider verification/enrichment. Search-result metadata is provisional until verification reaches `READY`; failures become visible `ERROR` state with retry.
-2. Canonical CSV: strict source/id based round-trip export/import with synchronous provider revalidation.
-3. Quick import: paste titles or supported provider URLs -> resolve candidates across applicable configured providers -> review -> save. RAWG game URLs are not accepted until a documented exact URL-to-ID resolver exists; game titles may still produce RAWG candidates when the provider is configured.
-4. LLM migration: arbitrary legacy document is converted externally into migration CSV -> media-list validates/resolves -> review -> save.
-
-Migration CSV requires either `title` or `source_url`. Optional columns are `status`, `score`, `progress_current`, `progress_total`, `notes`, `time_spent_override_minutes`.
+Messy documents are transformed outside the application into Quick Import lines using the built-in copyable GPT-5.6 helper prompt. The application itself accepts only the simple list field or canonical CSV; there is no separate LLM-migration CSV format.

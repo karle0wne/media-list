@@ -2,26 +2,6 @@ import { getDatabase } from "@/db";
 import { serviceState } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 import { listUsers } from "@/lib/services/users";
+import { CopyButton } from "@/components/copy-button";
 import { createInviteAction, toggleUserAction } from "../actions";
-
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ invite?: string; error?: string }> }) {
-  await requireAdmin();
-  const db = getDatabase().db;
-  const users = await listUsers(db);
-  const backupState = (await db.select().from(serviceState).limit(1))[0] ?? null;
-  const { invite, error } = await searchParams;
-  const base = process.env.APP_BASE_URL?.replace(/\/$/, "") || "";
-
-  return (
-    <section>
-      <div className="pageTitle"><div><h1>Users</h1><p className="muted">Invite-only access; no public registration.</p></div><form action={createInviteAction}><button type="submit">Create invite</button></form></div>
-      {error && <p className="error">{error}</p>}
-      {invite && <div className="success"><strong>One-time invite:</strong><code>{base}/register?token={invite}</code></div>}
-      <div className="card">
-        <strong>Last successful backup</strong>
-        <p className="muted">{backupState?.lastBackupAt ? backupState.lastBackupAt.toISOString() : "No successful backup recorded yet."}</p>
-      </div>
-      <div className="card tableWrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td>{user.username}</td><td>{user.role}</td><td>{user.active ? "active" : "disabled"}</td><td>{user.role !== "ADMIN" && <form action={toggleUserAction}><input type="hidden" name="userId" value={user.id}/><input type="hidden" name="active" value={String(!user.active)}/><button className="secondary" type="submit">{user.active ? "Disable" : "Enable"}</button></form>}</td></tr>)}</tbody></table></div>
-    </section>
-  );
-}
+export default async function AdminPage({searchParams}:{searchParams:Promise<{invite?:string;error?:string}>}){await requireAdmin();const db=getDatabase().db;const users=await listUsers(db);const backup=(await db.select().from(serviceState).limit(1))[0]??null;const{invite,error}=await searchParams;const base=process.env.APP_BASE_URL?.replace(/\/$/,"")||"";const inviteUrl=invite?`${base}/register?token=${invite}`:"";return <section><div className="pageTitle"><div><h1>Users</h1><p className="muted">Accounts are invite-only. Create a one-time link and send it to the person you want to add.</p></div><form action={createInviteAction}><button type="submit">+ Add user</button></form></div>{error&&<p className="error">{error}</p>}{invite&&<div className="invitePanel"><div><strong>One-time registration link</strong><p className="muted">The invite is consumed after one successful registration.</p><code>{inviteUrl}</code></div><CopyButton text={inviteUrl} label="Copy link"/></div>}<div className="adminMeta"><span>Last successful backup</span><strong>{backup?.lastBackupAt?backup.lastBackupAt.toISOString():"Not recorded yet"}</strong></div><div className="tableWrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>{users.map(user=><tr key={user.id}><td>{user.username}</td><td>{user.role}</td><td>{user.active?"active":"disabled"}</td><td>{user.role!=="ADMIN"&&<form action={toggleUserAction}><input type="hidden" name="userId" value={user.id}/><input type="hidden" name="active" value={String(!user.active)}/><button className="secondary" type="submit">{user.active?"Disable":"Enable"}</button></form>}</td></tr>)}</tbody></table></div></section>;}
