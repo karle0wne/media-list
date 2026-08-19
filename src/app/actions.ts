@@ -8,10 +8,11 @@ import { authenticate, createInvite, registerWithInvite, setUserActive } from "@
 import { addSelectedMediaToUser, deleteUserMedia, retryMediaMetadata, updateUserMedia } from "@/lib/services/media";
 import { createMigrationImport, createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
-import { parseUserMediaInput } from "@/lib/user-media";
+import { parseMediaStatus, parseOptionalNonNegativeInteger, parseUserMediaInput } from "@/lib/user-media";
 
 function str(form: FormData, key: string) { const value = form.get(key); return typeof value === "string" ? value.trim() : ""; }
 function goError(path: string, error: unknown): never { const message = error instanceof Error ? error.message : "Unexpected error"; redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`); }
+function returnTo(form: FormData) { const value = str(form, "returnTo"); return value.startsWith("/") && !value.startsWith("//") ? value : "/"; }
 
 export async function loginAction(form: FormData) { const { db } = getDatabase(); const user = await authenticate(db, str(form, "username"), str(form, "password")); if (!user) redirect("/login?error=Invalid%20username%20or%20password"); await createSession(user.id); redirect("/"); }
 export async function logoutAction() { await deleteCurrentSession(); redirect("/login"); }
@@ -37,7 +38,29 @@ export async function retryMetadataAction(form: FormData) {
   const user = await requireUser();
   const mediaId = str(form, "mediaId");
   if (await retryMediaMetadata(getDatabase().db, user.id, mediaId)) scheduleMediaEnrichment(mediaId);
-  redirect("/");
+  redirect(returnTo(form));
+}
+
+export async function quickStatusAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const status = parseMediaStatus(str(form, "status"), true)!;
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { status });
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
+}
+
+export async function quickScoreAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const score = parseOptionalNonNegativeInteger(str(form, "score"), "score", 10);
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { score });
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
 }
 
 export async function updateMediaAction(form: FormData) {
@@ -60,12 +83,12 @@ export async function updateMediaAction(form: FormData) {
       timeSpentOverrideMinutes: values.timeSpentOverrideMinutes ?? null,
     });
   } catch (error) {
-    goError("/", error);
+    goError(returnTo(form), error);
   }
-  redirect("/");
+  redirect(returnTo(form));
 }
 
-export async function deleteMediaAction(form: FormData) { const user = await requireUser(); await deleteUserMedia(getDatabase().db, user.id, str(form, "id")); redirect("/"); }
+export async function deleteMediaAction(form: FormData) { const user = await requireUser(); await deleteUserMedia(getDatabase().db, user.id, str(form, "id")); redirect(returnTo(form)); }
 export async function quickImportAction(form: FormData) { const user = await requireUser(); let batchId: string; try { batchId = await createQuickImport(getDatabase().db, user.id, str(form, "text")); } catch (error) { goError("/import", error); } redirect(`/import/review/${batchId}`); }
 export async function migrationImportAction(form: FormData) { const user = await requireUser(); let batchId: string; try { const file = form.get("file"); if (!(file instanceof File) || file.size === 0) throw new Error("Choose a migration CSV file"); if (file.size > 2_000_000) throw new Error("Migration CSV is too large (2 MB max)"); batchId = await createMigrationImport(getDatabase().db, user.id, await file.text()); } catch (error) { goError("/import", error); } redirect(`/import/review/${batchId}`); }
 export async function canonicalImportAction(form: FormData) { const user = await requireUser(); let summary: string; try { const file = form.get("file"); if (!(file instanceof File) || file.size === 0) throw new Error("Choose a canonical CSV file"); if (file.size > 2_000_000) throw new Error("Canonical CSV is too large (2 MB max)"); const report = await importCanonical(getDatabase().db, user.id, await file.text()); summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0] ? `; ${report.errors[0]}` : ""}`; } catch (error) { goError("/import", error); } redirect(`/import?result=${encodeURIComponent(summary)}`); }
