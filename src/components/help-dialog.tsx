@@ -1,0 +1,4 @@
+"use client";
+import { useRef } from "react";
+import { CopyButton } from "./copy-button";
+export function HelpDialog({buttonLabel,title,intro,text}:{buttonLabel:string;title:string;intro:string;text:string}){const dialog=useRef<HTMLDialogElement>(null);return <><button className="secondary" type="button" onClick={()=>dialog.current?.showModal()}>{buttonLabel}</button><dialog className="helpDialog" ref={dialog}><div className="dialogHeading"><div><h2>{title}</h2><p className="muted">{intro}</p></div><button className="iconButton secondary" type="button" onClick={()=>dialog.current?.close()} aria-label="Close">×</button></div><pre className="helpText">{text}</pre><div className="dialogActions"><CopyButton text={text}/><button type="button" onClick={()=>dialog.current?.close()}>Done</button></div></dialog></>;}
