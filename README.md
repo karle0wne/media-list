@@ -66,7 +66,7 @@ The main configuration surface is documented in [.env.example](.env.example). `T
 
 ## Docker Compose
 
-The repository is independently deployable and does not depend on the owner's private infrastructure repository:
+The repository is independently deployable and does not depend on an external infrastructure repository:
 
 ```bash
 git clone https://github.com/karle0wne/media-list.git
@@ -130,13 +130,17 @@ A successful backup creates and validates a transactionally consistent SQLite sn
 <S3_PREFIX>latest/media-list.db
 ```
 
-There is no application-managed timestamped backup history, monthly retention policy, or storage-budget policy. Remote restore always targets that same recovery object:
+There is no application-managed timestamped backup history, monthly retention policy, or storage-budget policy.
+
+Remote materialization targets that recovery object:
 
 ```bash
 docker compose stop app
 docker compose run --rm app npm run restore
 docker compose up -d app
 ```
+
+If the object exists, `restore` validates it and atomically replaces the local SQLite database. A confirmed S3/R2 `NoSuchKey` is treated as first bootstrap: `restore` succeeds without creating a database, and normal Compose startup then runs migrations against a fresh SQLite database. Authentication, bucket, network, configuration, and other storage failures still fail closed; they are not interpreted as an empty store.
 
 Deployment rollback is a separate short-lived local transaction using:
 
