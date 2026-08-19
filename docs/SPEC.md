@@ -22,7 +22,7 @@
 - Anime/donghua: AniList GraphQL. MAL URLs can be resolved through AniList's `idMal` lookup.
 - Movies and TV: TMDB. A TMDB API Read Access Token is required.
 - Books: Open Library.
-- Games: RAWG. `RAWG_API_KEY` enables game search. RAWG data/images are visibly attributed with an active RAWG link wherever they are displayed.
+- Games: RAWG. `RAWG_API_KEY` enables game search and exact numeric-ID revalidation. RAWG data/images are accompanied by a global active RAWG backlink while the provider is configured.
 - Cyrillic/localized anime fallback: Wikidata aliases may be used only after direct AniList search returns no candidates. Wikidata is only a resolver fallback, not canonical identity.
 
 ## User state
@@ -35,7 +35,7 @@ Video watch time is derived from provider runtime and progress when possible. Fo
 
 1. Manual canonical add: choose category -> search only its canonical provider -> explicit exact choice (for TV: show -> season) -> immediate local save -> durable provider verification/enrichment. Search-result metadata is provisional until verification reaches `READY`; failures become visible `ERROR` state with retry.
 2. Canonical CSV: strict source/id based round-trip import/export with synchronous provider revalidation.
-3. Quick import: paste titles or supported provider URLs (including Cyrillic titles and RAWG game URLs when configured) -> resolve candidates across applicable providers -> review -> save.
+3. Quick import: paste titles or supported provider URLs -> resolve candidates across applicable configured providers -> review -> save. RAWG game URLs are not accepted until a documented exact URL-to-ID resolver exists; game titles may still produce RAWG candidates when the provider is configured.
 4. LLM migration: arbitrary legacy document is converted externally into migration CSV -> media-list validates/resolves -> review -> save.
 
 Migration CSV requires either `title` or `source_url`. Optional columns are `status`, `score`, `progress_current`, `progress_total`, `notes`, `time_spent_override_minutes`.
