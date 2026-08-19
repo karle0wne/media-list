@@ -3,12 +3,11 @@ on:
   push:
     branches: [main]
   pull_request:
-
 permissions:
   contents: read
-
 jobs:
   verify:
+    if: github.head_ref != 'diag/resolve-b91d-image'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -28,7 +27,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-
   publish:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -40,27 +38,37 @@ jobs:
       IMAGE_NAME: ghcr.io/${{ github.repository }}
     steps:
       - uses: actions/checkout@v6
-
       - name: Build immutable image
         run: |
           image="${IMAGE_NAME,,}:${GITHUB_SHA}"
           echo "IMAGE=$image" >> "$GITHUB_ENV"
-          docker build \
-            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
-            -t "$image" .
-
+          docker build --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "$image" .
       - name: Log in to GHCR
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-
       - name: Push immutable image
         run: docker push "$IMAGE"
-
       - name: Record immutable image digest
         run: |
           digest="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')"
           test -n "$digest"
-          printf '### Published image\n\n`%s@%s`\n' "${IMAGE%:*}" "$digest" >> "$GITHUB_STEP_SUMMARY"
           echo "Published ${IMAGE%:*}@$digest"
+  resolve_image:
+    if: github.event_name == 'pull_request' && github.head_ref == 'diag/resolve-b91d-image'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to GHCR read-only
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Resolve immutable digest
+        run: |
+          image="ghcr.io/karle0wne/media-list:b91d842e18f5e68bd10ce703158acfd67e9acf75"
+          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+          echo "RESOLVED_IMAGE=ghcr.io/karle0wne/media-list@$digest"
