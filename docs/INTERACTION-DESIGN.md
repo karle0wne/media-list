@@ -1,45 +1,40 @@
 # Interaction design
 
-`media-list` should feel like editing a small personal list, not operating a dashboard. The service is intentionally ultra-light: SQLite is the live state, provider metadata is auxiliary, and normal list interaction must remain useful even when an external provider is slow, unavailable, or rate-limited.
+`media-list` should feel like editing a small personal list, not operating a dashboard. SQLite list state is the product; provider metadata is auxiliary, and normal list interaction remains useful when providers are unavailable.
 
-## Structure
+## Library structure
 
-The library is the primary surface. Status tabs are its first-level navigation. Rows are the main objects and use one stable information hierarchy:
+Status tabs are first-level navigation. Rows are the primary objects:
 
 ```text
 cover + title
-→ provider/year/original-title metadata
+→ year / provider / native title / provider-supplied romanized title
 → personal notes
-→ focused list fields (status, score, progress, type, updated)
+→ comparable list fields
 ```
 
-Title/metadata/notes stay together because they describe one position. Columns represent comparable list state. Status and score are direct controls and save on change; they must not require a second confirmation button.
+Status, score, progress, and notes are edited directly in the row. There is no second row editor or save-card. Status and score save immediately on change. Progress saves when its focused inline editor is left. Notes display at most five lines by default; clicking ordinary row space expands/collapses the row, while clicking notes edits them in place. Changed notes save when the textarea loses focus.
 
-Secondary filtering does not compete with status tabs. Search remains visible. Type filters, score filters, note filters, sort order, and column visibility live in one Settings dialog. Column headers perform the conventional table action: selecting a sortable header toggles ascending/descending order.
+Links, selects, inputs, buttons, labels, and checkboxes retain their own actions and never trigger row expansion. Notes remain keyboard-focusable rather than turning a table row into a pseudo-button.
 
-## Editing and destructive actions
+The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date added` first. Search is always visible. Settings owns media-type/score/note filters, sort direction, and optional columns. `Clear filters` clears filters only; presentation state is preserved. Media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
 
-A row should not carry a permanent menu button merely to expose ordinary editing. Clicking non-interactive row space opens one focused dialog containing all editable user-owned fields that apply to that medium. Existing links, selects, inputs, buttons, and checkboxes keep their own actions and do not trigger the row dialog.
+Bulk selection is scoped to the IDs currently visible after status/search/filter/sort navigation. Hidden or stale IDs are never included in the count, confirmation, or delete request. Batch removal still requires explicit confirmation and is server-scoped to the authenticated user.
 
-Selection checkboxes exist only for bulk actions. Batch removal has an explicit confirmation dialog and is still constrained by the authenticated user ID on the server.
+## Add flow
+
+Manual Add is category → canonical provider → exact work (TV: show → season). The search field is the primary flexible-width control and keeps the same logical order on desktop and mobile. Autofocus is used only before a query has results.
+
+Results reserve a stable thumbnail slot even when no cover exists. They show compact provider/year information and available discriminators such as book author, native title, or romanized title. Add buttons have item-specific accessible names. Provider images are fetched directly, but stored large-provider variants are normalized to bounded thumbnail URLs when the provider supports it.
 
 ## Secondary workflows
 
-Import/export, user administration, help, and provider credits are secondary workflows. They use progressive disclosure instead of dashboard card grids:
-
-- Quick Import is one large paste surface followed by candidate review.
-- Canonical CSV is the strict provider-ID round-trip path.
-- Contextual help opens in dialogs and can be copied without permanently occupying the page.
-- Markdown export is a human-readable snapshot; CSV remains the machine round-trip format.
-- User creation is expressed as “Add user” and produces a copyable one-time registration link.
-- Provider attribution lives in a compact Credits surface rather than a separate About page.
+Quick Import, canonical CSV, Markdown export, administration, help, and provider credits remain secondary workflows. Registration is invite-only. Password recovery is a separate one-time-token flow bound to an existing account; it does not reuse registration invites and does not require email infrastructure. Provider attribution remains in a compact, named Credits dialog.
 
 ## Provider behavior
 
-External metadata must never become a reason the saved list stops working. Search and enrichment have bounded HTTP deadlines. Rate limits and temporary upstream failures become visible retry-later states; the application does not add retry storms, queues, caches, or new services to hide them. Local-first Add keeps the selected position even if exact enrichment later fails.
-
-Canonical provider APIs remain useful for stable identity, exact revalidation, TV season/episode boundaries, book page counts, covers, and provider URLs. Wikidata is only a bounded localization/discovery adapter. Watch/play time is not a cross-media concept and is deliberately absent from the model.
+Provider identity remains canonical identity. Exact revalidation, TV season boundaries, book page counts, canonical links, covers, native names and available romanization come from canonical provider APIs. Wikidata remains only a bounded localization/discovery adapter. Provider failure degrades discovery/enrichment rather than saved-list availability.
 
 ## Visual language
 
-Keep the dense MyAnimeList-derived table structure and Catppuccin theme family. Prefer low-chrome rows, native table semantics, native dialogs, compact controls, and clear hierarchy over nested cards. Responsive layouts may scroll a genuinely tabular region horizontally rather than pretending every row is an unrelated mobile card. Presentation preferences must stay outside application state unless they affect the user’s actual media data.
+Keep the dense MyAnimeList-derived table and Catppuccin theme family. Prefer low chrome, semantic tables, native forms/dialogs where a secondary workflow actually needs them, compact controls, and direct manipulation over nested cards or dashboard surfaces.
