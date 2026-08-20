@@ -8,32 +8,41 @@ See [docs/SPEC.md](docs/SPEC.md) for product invariants and [docs/INTERACTION-DE
 
 ## Capabilities
 
-- Invite-only local accounts with `MAX_USERS` guard and copyable one-time invite links.
+- Invite-only local accounts with `MAX_USERS`, copyable registration links, and separate one-time password-reset links.
 - AniList anime/donghua, TMDB movies/TV, Open Library books, and RAWG games.
 - TV seasons as separate positions using `TMDB series id + season:N`.
-- Dense MAL-inspired Catppuccin table with status tabs, autosaving status/score, sortable columns, configurable filters/columns, focused row dialogs, and bulk removal.
-- Category-first manual search and local-first Add with durable retryable enrichment.
+- Dense MAL-inspired Catppuccin table: row-first inline editing for status/score/progress/notes, sortable/configurable columns, filters, and user-scoped bulk removal.
+- Notes preview up to five lines, expand with the row, and autosave when inline editing loses focus.
+- Category-first manual search with stable thumbnail slots, exact-work discriminators, local-first save, and durable retryable enrichment.
 - Bounded Cyrillic alias discovery through Wikidata without making Wikidata canonical.
-- Exact RAWG URL → numeric identity resolution.
+- Exact RAWG URL → numeric identity resolution; saved RAWG links target the concrete game and covers use bounded provider thumbnails.
 - Quick Import from pasted titles/provider URLs with review; canonical CSV import/export; human-readable Markdown export.
-- Explicit `npm run providers:smoke` live-provider probe that is not part of routine CI.
+- Explicit `npm run providers:smoke` live-provider probe outside routine CI.
 - SQLite storage and S3-compatible disaster-recovery backup.
 
 ## Providers
 
-- **AniList** — anime/donghua; MAL URLs resolve through AniList's MAL mapping.
+- **AniList** — anime/donghua; MAL URLs resolve through AniList's MAL mapping. Native and provider-supplied romaji titles are retained when distinct.
 - **TMDB** — movies and TV; requires `TMDB_API_TOKEN`.
-- **Open Library** — books.
+- **Open Library** — books, including author disambiguation in Add results.
 - **RAWG** — games when `RAWG_API_KEY` is configured.
 - **Wikidata** — bounded localized search assistance only, never canonical identity.
 
-Provider HTTP requests have application-owned deadlines. Rate limits and temporary upstream failures become visible retry-later metadata states; there are no automatic retry loops, provider queues, or image proxies. Provider APIs remain because exact identity, revalidation, TV season structure, page counts, covers, and provider URLs are useful list metadata.
+Provider HTTP requests have application-owned deadlines. Rate limits and temporary upstream failures become visible retry-later metadata states; there are no automatic retry loops, provider queues, mail infrastructure, or image proxy services.
 
-## Entry paths
+## Entry and account paths
 
-Normal Add is category → canonical provider search → exact selection → immediate local save → durable exact enrichment.
+Normal Add is category → canonical provider search → exact selection → immediate local save → durable exact enrichment. Quick Import accepts one title or supported provider URL per line and stages candidates for review. Canonical CSV is the strict machine round trip; Markdown export is human-readable archival.
 
-Quick Import accepts one title or supported provider URL per line and stages candidates for review. The Import / Export page includes a copyable GPT-5.6 helper prompt for extracting paste-ready lines from messy documents. Canonical CSV is the strict provider-ID round-trip format when user state must be preserved. Markdown export is for human-readable archival.
+Admins create new accounts with one-time registration links. Password recovery is deliberately separate: an admin can create a reset link for an existing user. A locked-out operator can recover the admin account from the trusted runtime environment:
+
+```bash
+npm run admin:create-password-reset -- admin
+# or emergency direct rotation:
+npm run admin:set-password -- admin 'a-new-long-password'
+```
+
+The reset-link command requires `APP_BASE_URL`, prints the one-time URL locally, and does not introduce email/SMTP.
 
 ## Local development
 
@@ -54,14 +63,12 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
-npm run providers:smoke   # explicit live provider check; uses configured credentials
+npm run providers:smoke
 ```
 
 The main configuration surface is [.env.example](.env.example). Production credentials stay outside this repository.
 
 ## Docker Compose
-
-The repository is independently deployable:
 
 ```bash
 git clone https://github.com/karle0wne/media-list.git
@@ -76,16 +83,12 @@ Compose applies pending migrations before starting Next.js. SQLite lives at `./d
 
 ## Database and maintenance
 
-Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also carries the repository's compatibility cleanup for legacy schema columns.
-
-Routine application-owned commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
+Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also owns bounded compatibility cleanup for legacy columns and the reset-token table. Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
 
 ## Backup and restore
 
-The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it. `npm run backup` writes one validated recovery object, `<S3_PREFIX>latest/media-list.db`; there is no application-managed PITR/history policy.
-
-`npm run restore` materializes that recovery object. A confirmed S3/R2 `NoSuchKey` is first bootstrap; authentication, bucket, network, configuration, and other storage failures fail closed. Deployment rollback is a separate local transaction using `npm run snapshot -- /data/pre-deploy.db` and `npm run restore:local -- /data/pre-deploy.db`.
+The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it. `npm run backup` writes one validated recovery object, `<S3_PREFIX>latest/media-list.db`; there is no application-managed PITR/history policy. `npm run restore` materializes that object. A confirmed S3/R2 `NoSuchKey` is first bootstrap; other storage failures fail closed.
 
 ## Runtime contract
 
-`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, and tokens must never be committed.
+`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, invite tokens, and password-reset tokens must never be committed.
