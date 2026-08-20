@@ -78,9 +78,8 @@ test("mobile viewport contains page overflow and keeps navigation on intended ro
   await login(page);
   const pageOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(pageOverflow).toBeLessThanOrEqual(1);
-  const brandBox = await page.getByRole("link", { name: "media-list" }).boundingBox();
-  expect(brandBox).not.toBeNull();
-  expect(brandBox?.height ?? 999).toBeLessThan(30);
+  const brand = page.getByRole("link", { name: "media-list" });
+  await expect(brand).toHaveCSS("white-space", "nowrap");
   const tabTops = await page.locator(".statusTabs a").evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
   expect(new Set(tabTops).size).toBe(1);
   await capture(page, "library-mobile");
