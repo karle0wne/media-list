@@ -8,12 +8,8 @@ import { createAdmin } from "../src/lib/services/users";
 import type { MediaCandidate } from "../src/lib/types";
 import { openTestDatabase } from "./db";
 
-const provisional: MediaCandidate = {
-  key: "ANILIST:999002:", type: "ANIME", source: "ANILIST", externalId: "999002", externalSubId: "", title: "Search Result", year: 2026,
-};
-const exact: MediaCandidate = {
-  ...provisional, title: "Provider Canonical Title", episodeCount: 12, coverUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg",
-};
+const provisional: MediaCandidate = { key: "ANILIST:999002:", type: "ANIME", source: "ANILIST", externalId: "999002", externalSubId: "", title: "Search Result", year: 2026 };
+const exact: MediaCandidate = { ...provisional, title: "Provider Canonical Title", episodeCount: 12, coverUrl: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg" };
 
 test("manual selection is durable before provider enrichment and later becomes canonical", async () => {
   const { db, sqlite } = openTestDatabase();
@@ -29,6 +25,19 @@ test("manual selection is durable before provider enrichment and later becomes c
     assert.equal(after.title, "Provider Canonical Title"); assert.equal(after.coverUrl, exact.coverUrl); assert.equal(after.metadataStatus, "READY"); assert.equal(after.metadataError, null);
     const state = (await db.select().from(userMedia).where(eq(userMedia.mediaId, added.item.id)).limit(1))[0];
     assert.equal(state.progressTotal, 12);
+  } finally { sqlite.close(); }
+});
+
+test("late enrichment preserves completed equals known total invariant", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const userId = await createAdmin(db, "admin_user", "correct-horse-battery");
+    const added = await addSelectedMediaToUser(db, userId, provisional, { status: "COMPLETED" });
+    let state = (await db.select().from(userMedia).where(eq(userMedia.mediaId, added.item.id)).limit(1))[0];
+    assert.equal(state.progressTotal, null); assert.equal(state.progressCurrent, 0);
+    await enrichMediaMetadata(db, added.item.id, async () => exact);
+    state = (await db.select().from(userMedia).where(eq(userMedia.mediaId, added.item.id)).limit(1))[0];
+    assert.equal(state.progressTotal, 12); assert.equal(state.progressCurrent, 12);
   } finally { sqlite.close(); }
 });
 
