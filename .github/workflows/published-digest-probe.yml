@@ -1,0 +1,33 @@
+name: published digest probe
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Print immutable digest
+        run: |
+          image="ghcr.io/${{ github.repository }}:beb56175be95d59adc0a38064d936214b7c4f923"
+          for attempt in $(seq 1 30); do
+            digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+            if [[ -n "$digest" ]]; then
+              echo "PUBLISHED_IMAGE=${image%:*}@$digest"
+              exit 0
+            fi
+            echo "Image tag not published yet (attempt $attempt/30)"
+            sleep 10
+          done
+          echo "Image tag did not appear within the bounded publish window" >&2
+          exit 1
