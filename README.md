@@ -34,7 +34,9 @@ Provider HTTP requests have application-owned deadlines. Rate limits and tempora
 
 Normal Add is category → canonical provider search → exact selection → immediate local save → durable exact enrichment. Quick Import accepts one title or supported provider URL per line and stages candidates for review. Canonical CSV is the strict machine round trip; Markdown export is human-readable archival.
 
-Admins create new accounts with one-time registration links. An admin may assign one unique email to an existing account; assigned emails are the explicit allowlist for passwordless login. When `RESEND_API_KEY`, `MAGIC_LINK_FROM`, and public `APP_BASE_URL` are configured, the login page sends a short-lived one-time link through the Resend HTTP API. Unknown emails receive the same generic response and never create a credential. Opening the email URL does not consume the credential; the landing page requires an explicit Continue action so mail-security scanners cannot burn the link.
+Admins create new accounts with one-time registration links. An admin may assign one unique email to an existing account; assigned emails are the explicit allowlist for passwordless login. When `BREVO_API_KEY`, a registered and verified Brevo sender in `MAGIC_LINK_FROM`, and public `APP_BASE_URL` are configured, the login page sends a short-lived one-time link through the Brevo transactional-email HTTP API. Unknown emails receive the same generic response and never create a credential. Opening the email URL does not consume the credential; the landing page requires an explicit Continue action so mail-security scanners cannot burn the link.
+
+A custom domain is not an application requirement for this path: the application only requires a verified Brevo sender address. Domain authentication may still improve deliverability, but it is external mail-provider configuration rather than media-list infrastructure.
 
 Password login and password recovery remain independent fallback paths. An admin can create a reset link for an existing user. A locked-out operator can recover the admin account from the trusted runtime environment:
 
