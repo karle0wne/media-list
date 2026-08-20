@@ -8,7 +8,7 @@ See [docs/SPEC.md](docs/SPEC.md) for product invariants and [docs/INTERACTION-DE
 
 ## Capabilities
 
-- Invite-only local accounts with `MAX_USERS`, copyable registration links, and separate one-time password-reset links.
+- Invite-only local accounts with `MAX_USERS`, optional allowlisted magic-link sign-in, copyable registration links, and separate one-time password-reset links.
 - AniList anime/donghua, TMDB movies/TV, Open Library books, and RAWG games.
 - TV seasons as separate positions using `TMDB series id + season:N`.
 - Dense MAL-inspired Catppuccin table: row-first inline editing for status/score/progress/notes, sortable/configurable columns, filters, and user-scoped bulk removal.
@@ -23,18 +23,20 @@ See [docs/SPEC.md](docs/SPEC.md) for product invariants and [docs/INTERACTION-DE
 ## Providers
 
 - **AniList** — anime/donghua; MAL URLs resolve through AniList's MAL mapping. Native and provider-supplied romaji titles are retained when distinct.
-- **TMDB** — movies and TV; requires `TMDB_API_TOKEN`.
+- **TMDB** — movies/TV; requires `TMDB_API_TOKEN`.
 - **Open Library** — books, including author disambiguation in Add results.
 - **RAWG** — games when `RAWG_API_KEY` is configured.
 - **Wikidata** — bounded localized search assistance only, never canonical identity.
 
-Provider HTTP requests have application-owned deadlines. Rate limits and temporary upstream failures become visible retry-later metadata states; there are no automatic retry loops, provider queues, mail infrastructure, or image proxy services.
+Provider HTTP requests have application-owned deadlines. Rate limits and temporary upstream failures become visible retry-later metadata states; there are no automatic retry loops, provider queues, self-hosted mail servers, or image proxy services.
 
 ## Entry and account paths
 
 Normal Add is category → canonical provider search → exact selection → immediate local save → durable exact enrichment. Quick Import accepts one title or supported provider URL per line and stages candidates for review. Canonical CSV is the strict machine round trip; Markdown export is human-readable archival.
 
-Admins create new accounts with one-time registration links. Password recovery is deliberately separate: an admin can create a reset link for an existing user. A locked-out operator can recover the admin account from the trusted runtime environment:
+Admins create new accounts with one-time registration links. An admin may assign one unique email to an existing account; assigned emails are the explicit allowlist for passwordless login. When `RESEND_API_KEY`, `MAGIC_LINK_FROM`, and public `APP_BASE_URL` are configured, the login page sends a short-lived one-time link through the Resend HTTP API. Unknown emails receive the same generic response and never create a credential. Opening the email URL does not consume the credential; the landing page requires an explicit Continue action so mail-security scanners cannot burn the link.
+
+Password login and password recovery remain independent fallback paths. An admin can create a reset link for an existing user. A locked-out operator can recover the admin account from the trusted runtime environment:
 
 ```bash
 npm run admin:create-password-reset -- admin
@@ -42,7 +44,7 @@ npm run admin:create-password-reset -- admin
 npm run admin:set-password -- admin 'a-new-long-password'
 ```
 
-The reset-link command requires `APP_BASE_URL`, prints the one-time URL locally, and does not introduce email/SMTP.
+The reset-link command requires `APP_BASE_URL`, prints the one-time URL locally, and does not depend on email delivery.
 
 ## Local development
 
@@ -83,7 +85,7 @@ Compose applies pending migrations before starting Next.js. SQLite lives at `./d
 
 ## Database and maintenance
 
-Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also owns bounded compatibility cleanup for legacy columns and the reset-token table. Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
+Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also owns bounded compatibility cleanup for legacy columns, user email identity, password-reset credentials, and magic-login credentials. Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
 
 ## Backup and restore
 
@@ -91,4 +93,4 @@ The application owns SQLite backup/restore correctness while an external control
 
 ## Runtime contract
 
-`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, invite tokens, and password-reset tokens must never be committed.
+`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, invite tokens, password-reset tokens, and magic-login tokens must never be committed.
