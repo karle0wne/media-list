@@ -1,14 +1,2 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { openDatabase } from "../src/db/index";
-
-const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
-
-export function openTestDatabase() {
-  const bundle = openDatabase(":memory:");
-  for (const dir of readdirSync(drizzleDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
-    bundle.sqlite.exec(readFileSync(join(drizzleDir, dir, "migration.sql"), "utf8"));
-  }
-  return bundle;
-}
+import { readFileSync,readdirSync } from "node:fs";import { join } from "node:path";import { fileURLToPath } from "node:url";import { openDatabase } from "../src/db/index";import { applySchemaCompatibility } from "../src/db/compat";
+const drizzleDir=fileURLToPath(new URL("../drizzle",import.meta.url));export function openTestDatabase(){const bundle=openDatabase(":memory:");for(const dir of readdirSync(drizzleDir,{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>entry.name).sort())bundle.sqlite.exec(readFileSync(join(drizzleDir,dir,"migration.sql"),"utf8"));applySchemaCompatibility(bundle.sqlite);return bundle;}
