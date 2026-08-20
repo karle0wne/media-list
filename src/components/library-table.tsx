@@ -1,16 +1,118 @@
 "use client";
+
 import { useMemo, useRef, useState, type FocusEvent, type MouseEvent } from "react";
-import { ProviderCover } from "./provider-cover";
 import { deleteMediaManyAction, quickNotesAction, quickProgressAction, quickScoreAction, quickStatusAction, retryMetadataAction } from "@/app/actions";
 import { areAllVisibleSelected, reconcileSelection } from "@/lib/library-view";
-import type { MediaStatus, MediaType } from "@/lib/types";
 import type { MediaSort, SortDirection } from "@/lib/services/media";
+import type { MediaStatus, MediaType } from "@/lib/types";
+import { ProviderCover } from "./provider-cover";
 
-export type LibraryRow={userMediaId:string;mediaId:string;title:string;originalTitle:string|null;romanizedTitle:string|null;type:MediaType;year:number|null;source:string;externalUrl:string;coverUrl:string|null;metadataStatus:string;metadataError:string|null;status:MediaStatus;score:number|null;progressCurrent:number;progressTotal:number|null;notes:string|null;createdAt:string};
-type SortLinks=Record<MediaSort,Record<SortDirection,string>>;const statuses:Array<[MediaStatus,string]>=[["IN_PROGRESS","In progress"],["COMPLETED","Completed"],["ON_HOLD","On hold"],["DROPPED","Dropped"],["PLANNED","Planned"]];
-export function LibraryTable({items,returnTo,visibleColumns,sort,direction,sortLinks}:{items:LibraryRow[];returnTo:string;visibleColumns:string[];sort:MediaSort;direction:SortDirection;sortLinks:SortLinks}){const[selected,setSelected]=useState<Set<string>>(new Set());const[expanded,setExpanded]=useState<Set<string>>(new Set());const[editingNotes,setEditingNotes]=useState<string|null>(null);const deleteDialog=useRef<HTMLDialogElement>(null);const visibleIds=useMemo(()=>items.map(item=>item.userMediaId),[items]);const scopedSelected=useMemo(()=>reconcileSelection(selected,visibleIds),[selected,visibleIds]);const allSelected=areAllVisibleSelected(scopedSelected,visibleIds);const visible=useMemo(()=>new Set(visibleColumns),[visibleColumns]);function toggleAll(){setSelected(allSelected?new Set():new Set(visibleIds));}function rowClick(event:MouseEvent,item:LibraryRow){const target=event.target as HTMLElement;if(target.closest("a,button,input,select,textarea,label,form"))return;setExpanded(previous=>toggleSet(previous,item.userMediaId));}function header(label:string,key:MediaSort){const active=sort===key;const next:SortDirection=active&&direction==="asc"?"desc":"asc";return <th aria-sort={active?(direction==="asc"?"ascending":"descending"):"none"}><a className="sortHeader" href={sortLinks[key][next]}>{label}{active?(direction==="asc"?" ↑":" ↓"):""}</a></th>;}
-return <><div className="selectionBar" aria-live="polite"><span>{scopedSelected.size?`${scopedSelected.size} selected`:"Select rows for bulk actions"}</span>{scopedSelected.size>0&&<button className="danger compactDanger" type="button" onClick={()=>deleteDialog.current?.showModal()}>Remove selected</button>}</div><div className="tableWrap libraryTableWrap"><table className="libraryTable"><thead><tr><th className="selectColumn"><input aria-label="Select all visible rows" type="checkbox" checked={allSelected} onChange={toggleAll}/></th>{header("Media","title")}{visible.has("status")&&<th>Status</th>}{visible.has("score")&&header("Score","score")}{visible.has("progress")&&header("Progress","progress")}{visible.has("type")&&header("Type","type")}{visible.has("added")&&header("Added","created")}</tr></thead><tbody>{items.map(item=><tr key={item.userMediaId} className={`libraryRow status-${item.status.toLowerCase().replace("_","-")} ${expanded.has(item.userMediaId)?"expanded":""}`} onClick={event=>rowClick(event,item)}><td className="selectColumn"><input aria-label={`Select ${item.title}`} type="checkbox" checked={scopedSelected.has(item.userMediaId)} onChange={()=>setSelected(previous=>{const next=reconcileSelection(previous,visibleIds);if(next.has(item.userMediaId))next.delete(item.userMediaId);else next.add(item.userMediaId);return next;})}/></td><td className="mediaCell">{item.coverUrl?<ProviderCover className="rowCover" src={item.coverUrl} width={48} height={68}/>:<div className="rowCover placeholder">{item.type}</div>}<div className="rowTitleBlock"><a className="rowTitle" href={item.externalUrl} target="_blank" rel="noreferrer">{item.title}</a><div className="rowMeta">{metadataLine(item)}</div><InlineNotes item={item} returnTo={returnTo} expanded={expanded.has(item.userMediaId)} editing={editingNotes===item.userMediaId} onEdit={()=>setEditingNotes(item.userMediaId)} onCancel={()=>setEditingNotes(null)}/>{item.metadataStatus==="PENDING"&&<div className="metadataState">Metadata pending…</div>}{item.metadataStatus==="ERROR"&&<div className="metadataState errorText">Metadata unavailable{item.metadataError?`: ${item.metadataError}`:""} <form action={retryMetadataAction} className="inlineForm"><input type="hidden" name="mediaId" value={item.mediaId}/><input type="hidden" name="returnTo" value={returnTo}/><button className="textAction" type="submit">Retry</button></form></div>}</div></td>{visible.has("status")&&<td><form action={quickStatusAction} className="autoForm"><input type="hidden" name="id" value={item.userMediaId}/><input type="hidden" name="returnTo" value={returnTo}/><select name="status" defaultValue={item.status} aria-label={`Status for ${item.title}`} onChange={event=>event.currentTarget.form?.requestSubmit()}>{statuses.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></form></td>}{visible.has("score")&&<td><form action={quickScoreAction} className="autoForm scoreForm"><input type="hidden" name="id" value={item.userMediaId}/><input type="hidden" name="returnTo" value={returnTo}/><select name="score" defaultValue={item.score??""} aria-label={`Score for ${item.title}`} onChange={event=>event.currentTarget.form?.requestSubmit()}><option value="">—</option>{Array.from({length:10},(_,i)=>i+1).map(value=><option value={value} key={value}>{value}</option>)}</select></form></td>}{visible.has("progress")&&<td className="compactCell">{item.type==="GAME"?"—":<ProgressEditor item={item} returnTo={returnTo}/>}</td>}{visible.has("type")&&<td className="compactCell"><span className="typeBadge">{typeLabel(item.type)}</span></td>}{visible.has("added")&&<td className="compactCell">{new Date(item.createdAt).toLocaleDateString()}</td>}</tr>)}</tbody></table></div><dialog className="confirmDialog" ref={deleteDialog} aria-labelledby="bulk-delete-title"><div className="dialogHeading"><div><h2 id="bulk-delete-title">Remove selected positions?</h2><p className="muted">This removes {scopedSelected.size} positions from your list. Shared media metadata is left intact.</p></div></div><form action={deleteMediaManyAction}>{[...scopedSelected].map(id=><input type="hidden" name="id" value={id} key={id}/>)}<input type="hidden" name="returnTo" value={returnTo}/><div className="dialogActions"><button className="secondary" type="button" onClick={()=>deleteDialog.current?.close()}>Cancel</button><button className="danger" type="submit">Remove {scopedSelected.size}</button></div></form></dialog></>;}
-function InlineNotes({item,returnTo,expanded,editing,onEdit,onCancel}:{item:LibraryRow;returnTo:string;expanded:boolean;editing:boolean;onEdit:()=>void;onCancel:()=>void}){if(editing)return <form action={quickNotesAction} className="notesForm"><input type="hidden" name="id" value={item.userMediaId}/><input type="hidden" name="returnTo" value={returnTo}/><textarea name="notes" rows={5} defaultValue={item.notes??""} autoFocus aria-label={`Notes for ${item.title}`} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();onCancel();}}} onBlur={event=>{if(event.currentTarget.value.trim()===(item.notes??"").trim()){onCancel();return;}event.currentTarget.form?.requestSubmit();}}/></form>;return <button type="button" className={`rowNotesButton ${expanded?"expanded":""} ${item.notes?"":"empty"}`} onClick={onEdit} aria-label={`Edit notes for ${item.title}`}>{item.notes||"Add notes"}</button>;}
-function ProgressEditor({item,returnTo}:{item:LibraryRow;returnTo:string}){function leave(event:FocusEvent<HTMLFormElement>){const next=event.relatedTarget as Node|null;if(next&&event.currentTarget.contains(next))return;event.currentTarget.requestSubmit();}return <form action={quickProgressAction} className="progressForm" onBlur={leave}><input type="hidden" name="id" value={item.userMediaId}/><input type="hidden" name="returnTo" value={returnTo}/><input name="progressCurrent" type="number" min="0" defaultValue={item.progressCurrent} aria-label={`Progress for ${item.title}`}/><span>/</span><input name="progressTotal" type="number" min="0" defaultValue={item.progressTotal??""} aria-label={`Total progress for ${item.title}`}/>{item.type==="BOOK"&&<span>pages</span>}</form>;}
-function metadataLine(item:LibraryRow){return [item.year??"year ?",item.source,item.originalTitle&&item.originalTitle!==item.title?item.originalTitle:null,item.romanizedTitle&&item.romanizedTitle!==item.title&&item.romanizedTitle!==item.originalTitle?item.romanizedTitle:null].filter(Boolean).join(" · ");}
-function toggleSet(previous:Set<string>,id:string){const next=new Set(previous);if(next.has(id))next.delete(id);else next.add(id);return next;}function typeLabel(type:MediaType){return({ANIME:"Anime",MOVIE:"Movie",SERIES:"Series",BOOK:"Book",GAME:"Game"}as const)[type];}
+export type LibraryRow = {
+  userMediaId: string;
+  mediaId: string;
+  title: string;
+  originalTitle: string | null;
+  romanizedTitle: string | null;
+  type: MediaType;
+  year: number | null;
+  source: string;
+  externalUrl: string;
+  coverUrl: string | null;
+  metadataStatus: string;
+  metadataError: string | null;
+  status: MediaStatus;
+  score: number | null;
+  progressCurrent: number;
+  progressTotal: number | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+type SortLinks = Record<MediaSort, Record<SortDirection, string>>;
+const statuses: Array<[MediaStatus, string]> = [["IN_PROGRESS", "In progress"], ["COMPLETED", "Completed"], ["ON_HOLD", "On hold"], ["DROPPED", "Dropped"], ["PLANNED", "Planned"]];
+
+export function LibraryTable({ items, returnTo, visibleColumns, sort, direction, sortLinks }: { items: LibraryRow[]; returnTo: string; visibleColumns: string[]; sort: MediaSort; direction: SortDirection; sortLinks: SortLinks }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  const visibleIds = useMemo(() => items.map((item) => item.userMediaId), [items]);
+  const scopedSelected = useMemo(() => reconcileSelection(selected, visibleIds), [selected, visibleIds]);
+  const allSelected = areAllVisibleSelected(scopedSelected, visibleIds);
+  const visible = useMemo(() => new Set(visibleColumns), [visibleColumns]);
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(visibleIds));
+  }
+
+  function rowClick(event: MouseEvent, item: LibraryRow) {
+    const target = event.target as HTMLElement;
+    if (target.closest("a,button,input,select,textarea,label,form")) return;
+    setExpanded((previous) => toggleSet(previous, item.userMediaId));
+  }
+
+  function header(label: string, key: MediaSort) {
+    const active = sort === key;
+    const next: SortDirection = active && direction === "asc" ? "desc" : "asc";
+    return <th aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}><a className="sortHeader" href={sortLinks[key][next]}>{label}{active ? (direction === "asc" ? " ↑" : " ↓") : ""}</a></th>;
+  }
+
+  return <>
+    <div className="selectionBar" aria-live="polite">
+      <span>{scopedSelected.size ? `${scopedSelected.size} selected` : "Select rows for bulk actions"}</span>
+      {scopedSelected.size > 0 && <button className="danger compactDanger" type="button" onClick={() => deleteDialog.current?.showModal()}>Remove selected</button>}
+    </div>
+    <div className="tableWrap libraryTableWrap"><table className="libraryTable"><thead><tr>
+      <th className="selectColumn"><input aria-label="Select all visible rows" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
+      {header("Media", "title")}
+      {visible.has("status") && <th>Status</th>}
+      {visible.has("score") && header("Score", "score")}
+      {visible.has("progress") && header("Progress", "progress")}
+      {visible.has("type") && header("Type", "type")}
+      {visible.has("added") && header("Added", "created")}
+    </tr></thead><tbody>{items.map((item) => <tr key={item.userMediaId} className={`libraryRow status-${item.status.toLowerCase().replace("_", "-")} ${expanded.has(item.userMediaId) ? "expanded" : ""}`} onClick={(event) => rowClick(event, item)}>
+      <td className="selectColumn"><input aria-label={`Select ${item.title}`} type="checkbox" checked={scopedSelected.has(item.userMediaId)} onChange={() => setSelected((previous) => { const next = reconcileSelection(previous, visibleIds); if (next.has(item.userMediaId)) next.delete(item.userMediaId); else next.add(item.userMediaId); return next; })} /></td>
+      <td className="mediaCell">{item.coverUrl ? <ProviderCover className="rowCover" src={item.coverUrl} width={48} height={68} /> : <div className="rowCover placeholder">{item.type}</div>}<div className="rowTitleBlock">
+        <a className="rowTitle" href={item.externalUrl} target="_blank" rel="noreferrer">{item.title}</a>
+        <div className="rowMeta">{metadataLine(item)}</div>
+        <InlineNotes item={item} returnTo={returnTo} expanded={expanded.has(item.userMediaId)} editing={editingNotes === item.userMediaId} onEdit={() => setEditingNotes(item.userMediaId)} onCancel={() => setEditingNotes(null)} />
+        {item.metadataStatus === "PENDING" && <div className="metadataState">Metadata pending…</div>}
+        {item.metadataStatus === "ERROR" && <div className="metadataState errorText">Metadata unavailable{item.metadataError ? `: ${item.metadataError}` : ""} <form action={retryMetadataAction} className="inlineForm"><input type="hidden" name="mediaId" value={item.mediaId} /><input type="hidden" name="returnTo" value={returnTo} /><button className="textAction" type="submit">Retry</button></form></div>}
+      </div></td>
+      {visible.has("status") && <td><form action={quickStatusAction} className="autoForm"><input type="hidden" name="id" value={item.userMediaId} /><input type="hidden" name="returnTo" value={returnTo} /><select name="status" defaultValue={item.status} aria-label={`Status for ${item.title}`} onChange={(event) => event.currentTarget.form?.requestSubmit()}>{statuses.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></form></td>}
+      {visible.has("score") && <td><form action={quickScoreAction} className="autoForm scoreForm"><input type="hidden" name="id" value={item.userMediaId} /><input type="hidden" name="returnTo" value={returnTo} /><select name="score" defaultValue={item.score ?? ""} aria-label={`Score for ${item.title}`} onChange={(event) => event.currentTarget.form?.requestSubmit()}><option value="">—</option>{Array.from({ length: 10 }, (_, i) => i + 1).map((value) => <option value={value} key={value}>{value}</option>)}</select></form></td>}
+      {visible.has("progress") && <td className="compactCell">{item.type === "GAME" ? "—" : <ProgressEditor item={item} returnTo={returnTo} />}</td>}
+      {visible.has("type") && <td className="compactCell"><span className="typeBadge">{typeLabel(item.type)}</span></td>}
+      {visible.has("added") && <td className="compactCell">{new Date(item.createdAt).toLocaleDateString()}</td>}
+    </tr>)}</tbody></table></div>
+    <dialog className="confirmDialog" ref={deleteDialog} aria-labelledby="bulk-delete-title"><div className="dialogHeading"><div><h2 id="bulk-delete-title">Remove selected positions?</h2><p className="muted">This removes {scopedSelected.size} positions from your list. Shared media metadata is left intact.</p></div></div><form action={deleteMediaManyAction}>{[...scopedSelected].map((id) => <input type="hidden" name="id" value={id} key={id} />)}<input type="hidden" name="returnTo" value={returnTo} /><div className="dialogActions"><button className="secondary" type="button" onClick={() => deleteDialog.current?.close()}>Cancel</button><button className="danger" type="submit">Remove {scopedSelected.size}</button></div></form></dialog>
+  </>;
+}
+
+function InlineNotes({ item, returnTo, expanded, editing, onEdit, onCancel }: { item: LibraryRow; returnTo: string; expanded: boolean; editing: boolean; onEdit: () => void; onCancel: () => void }) {
+  if (editing) return <form action={quickNotesAction} className="notesForm"><input type="hidden" name="id" value={item.userMediaId} /><input type="hidden" name="returnTo" value={returnTo} /><textarea name="notes" rows={5} defaultValue={item.notes ?? ""} autoFocus aria-label={`Notes for ${item.title}`} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onCancel(); } }} onBlur={(event) => { if (event.currentTarget.value.trim() === (item.notes ?? "").trim()) { onCancel(); return; } event.currentTarget.form?.requestSubmit(); }} /></form>;
+  return <button type="button" className={`rowNotesButton ${expanded ? "expanded" : ""} ${item.notes ? "" : "empty"}`} onClick={onEdit} aria-label={`Edit notes for ${item.title}`}>{item.notes || "Add notes"}</button>;
+}
+
+function ProgressEditor({ item, returnTo }: { item: LibraryRow; returnTo: string }) {
+  const unit = item.type === "BOOK" ? " pages" : "";
+  if (item.status === "COMPLETED" && item.progressTotal != null) return <span className="progressReadOnly">{item.progressCurrent} / {item.progressTotal}{unit}</span>;
+  function leave(event: FocusEvent<HTMLFormElement>) {
+    const next = event.relatedTarget as Node | null;
+    if (next && event.currentTarget.contains(next)) return;
+    const input = event.currentTarget.elements.namedItem("progressCurrent") as HTMLInputElement | null;
+    if (!input || Number(input.value) === item.progressCurrent) return;
+    event.currentTarget.requestSubmit();
+  }
+  return <form action={quickProgressAction} className="progressForm" onBlur={leave}>
+    <input type="hidden" name="id" value={item.userMediaId} />
+    <input type="hidden" name="returnTo" value={returnTo} />
+    <input name="progressCurrent" type="number" min="0" max={item.progressTotal ?? undefined} defaultValue={item.progressCurrent} aria-label={`Progress for ${item.title}`} />
+    {item.progressTotal != null && <span className="progressTotal">/ {item.progressTotal}</span>}
+    {item.type === "BOOK" && <span>pages</span>}
+  </form>;
+}
+
+function metadataLine(item: LibraryRow) { return [item.year ?? "year ?", item.source, item.originalTitle && item.originalTitle !== item.title ? item.originalTitle : null, item.romanizedTitle && item.romanizedTitle !== item.title && item.romanizedTitle !== item.originalTitle ? item.romanizedTitle : null].filter(Boolean).join(" · "); }
+function toggleSet(previous: Set<string>, id: string) { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; }
+function typeLabel(type: MediaType) { return ({ ANIME: "Anime", MOVIE: "Movie", SERIES: "Series", BOOK: "Book", GAME: "Game" } as const)[type]; }
