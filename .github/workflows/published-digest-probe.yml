@@ -11,6 +11,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - name: Log in to GHCR
         env:
@@ -19,6 +20,14 @@ jobs:
       - name: Print immutable digest
         run: |
           image="ghcr.io/${{ github.repository }}:623a4fb6afefd65786107fa90a052cf82be02f24"
-          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
-          test -n "$digest"
-          echo "PUBLISHED_IMAGE=${image%:*}@$digest"
+          for attempt in $(seq 1 30); do
+            digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+            if [[ -n "$digest" ]]; then
+              echo "PUBLISHED_IMAGE=${image%:*}@$digest"
+              exit 0
+            fi
+            echo "Image tag not published yet (attempt $attempt/30)"
+            sleep 10
+          done
+          echo "Image tag did not appear within the bounded publish window" >&2
+          exit 1
