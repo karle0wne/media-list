@@ -1,0 +1,26 @@
+name: diagnose published image
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/diagnose-published-image.yml
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect published main image
+        env:
+          IMAGE: ghcr.io/karle0wne/media-list:beb56175be95d59adc0a38064d936214b7c4f923
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          digest="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+          echo "PUBLISHED_IMAGE=ghcr.io/karle0wne/media-list@$digest"
+          echo "PUBLISHED_REVISION=beb56175be95d59adc0a38064d936214b7c4f923"
