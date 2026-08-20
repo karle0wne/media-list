@@ -23,7 +23,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <form action={createInviteAction}><button type="submit">+ Add user</button></form>
       </div>
       {error && <p className="error">{error}</p>}
-      {!magicEnabled && <p className="error">Email sign-in is not active until APP_BASE_URL, RESEND_API_KEY, and MAGIC_LINK_FROM are configured.</p>}
+      {!magicEnabled && <p className="error">Email sign-in is not active until APP_BASE_URL, BREVO_API_KEY, and MAGIC_LINK_FROM are configured.</p>}
       {invite && <TokenPanel title="One-time registration link" help="Consumed after one successful registration." url={inviteUrl} />}
       {reset && <TokenPanel title="One-time password reset link" help="Bound to one existing account and consumed after password change." url={resetUrl} />}
       <div className="adminMeta"><span>Last successful backup</span><strong>{backup?.lastBackupAt ? backup.lastBackupAt.toISOString() : "Not recorded yet"}</strong></div>

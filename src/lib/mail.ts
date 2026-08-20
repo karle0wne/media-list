@@ -1,27 +1,30 @@
 export type MailFetch = typeof fetch;
 
+const BREVO_EMAIL_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+
 export function magicLinkMailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY?.trim() && process.env.MAGIC_LINK_FROM?.trim() && process.env.APP_BASE_URL?.trim());
+  return Boolean(process.env.BREVO_API_KEY?.trim() && process.env.MAGIC_LINK_FROM?.trim() && process.env.APP_BASE_URL?.trim());
 }
 
 export async function sendMagicLinkEmail(email: string, loginUrl: string, fetchImpl: MailFetch = fetch) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const apiKey = process.env.BREVO_API_KEY?.trim();
   const from = process.env.MAGIC_LINK_FROM?.trim();
   if (!apiKey || !from) throw new Error("Magic-link email delivery is not configured");
 
-  const response = await fetchImpl("https://api.resend.com/emails", {
+  const response = await fetchImpl(BREVO_EMAIL_ENDPOINT, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+      "api-key": apiKey,
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
-      from,
-      to: [email],
+      sender: { name: "media-list", email: from },
+      to: [{ email }],
       subject: "Sign in to media-list",
-      text: `Open this link to sign in to media-list:\n\n${loginUrl}\n\nThe link expires shortly and can be used once.`,
-      html: `<p>Open this link to sign in to media-list:</p><p><a href="${escapeHtml(loginUrl)}">Sign in to media-list</a></p><p>The link expires shortly and can be used once.</p>`,
+      textContent: `Open this link to sign in to media-list:\n\n${loginUrl}\n\nThe link expires shortly and can be used once.`,
+      htmlContent: `<p>Open this link to sign in to media-list:</p><p><a href="${escapeHtml(loginUrl)}">Sign in to media-list</a></p><p>The link expires shortly and can be used once.</p>`,
     }),
   });
 
