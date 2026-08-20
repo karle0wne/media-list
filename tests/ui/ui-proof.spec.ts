@@ -72,17 +72,25 @@ test("desktop library and admin layouts expose stable inline controls", async ({
   await writeFile(`${output}/desktop-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
 });
 
-test("mobile viewport contains page overflow and keeps controls usable", async ({ page }) => {
+test("mobile viewport contains page overflow and keeps navigation on intended rows", async ({ page }) => {
   const diagnostics = await prepare(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
   const pageOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(pageOverflow).toBeLessThanOrEqual(1);
+  const brandBox = await page.getByRole("link", { name: "media-list" }).boundingBox();
+  expect(brandBox).not.toBeNull();
+  expect(brandBox?.height ?? 999).toBeLessThan(30);
+  const tabTops = await page.locator(".statusTabs a").evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
+  expect(new Set(tabTops).size).toBe(1);
   await capture(page, "library-mobile");
 
   await page.goto("/admin");
   const adminOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(adminOverflow).toBeLessThanOrEqual(1);
+  const addUserBox = await page.getByRole("button", { name: "+ Add user" }).boundingBox();
+  expect(addUserBox).not.toBeNull();
+  expect(addUserBox?.width ?? 0).toBeGreaterThan(300);
   await capture(page, "users-mobile");
 
   expect(diagnostics.consoleErrors).toEqual([]);
