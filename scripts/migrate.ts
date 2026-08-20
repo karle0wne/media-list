@@ -26,22 +26,30 @@ const result = spawnSync(command, ["drizzle-kit", "migrate"], { stdio: "inherit"
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-removeLegacyTimeColumns(dbPath);
+applyCompatibilityCleanup(dbPath);
 console.log("Database migrations applied.");
 
-function removeLegacyTimeColumns(path: string) {
+function applyCompatibilityCleanup(path: string) {
   const db = new DatabaseSync(path);
   try {
     dropColumnIfPresent(db, "media", "runtime_minutes");
     dropColumnIfPresent(db, "user_media", "time_spent_override_minutes");
+    if (hasColumn(db, "user_media", "status") && hasColumn(db, "user_media", "progress_current") && hasColumn(db, "user_media", "progress_total")) {
+      const result = db.prepare("UPDATE user_media SET progress_current = progress_total WHERE status = 'COMPLETED' AND progress_total IS NOT NULL AND progress_current != progress_total").run();
+      if (result.changes) console.log(`Repaired ${result.changes} completed progress row(s).`);
+    }
   } finally {
     db.close();
   }
 }
 
-function dropColumnIfPresent(db: DatabaseSync, table: string, column: string) {
+function hasColumn(db: DatabaseSync, table: string, column: string) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  if (!columns.some((item) => item.name === column)) return;
+  return columns.some((item) => item.name === column);
+}
+
+function dropColumnIfPresent(db: DatabaseSync, table: string, column: string) {
+  if (!hasColumn(db, table, column)) return;
   db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
   console.log(`Removed legacy ${table}.${column}.`);
 }
