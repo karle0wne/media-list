@@ -16,6 +16,8 @@ jobs:
       COOKIE_SECURE: "false"
       MAX_USERS: "5"
       SESSION_TTL_DAYS: "1"
+      RESEND_API_KEY: re_ui_proof_not_sent
+      MAGIC_LINK_FROM: login@example.com
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
