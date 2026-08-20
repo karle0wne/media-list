@@ -1,0 +1,56 @@
+name: ui proof
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_PATH: /tmp/media-list-ui-proof.db
+      APP_BASE_URL: http://127.0.0.1:3000
+      COOKIE_SECURE: "false"
+      MAX_USERS: "5"
+      SESSION_TTL_DAYS: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.15.0'
+          cache: npm
+          cache-dependency-path: package.json
+      - run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Prepare deterministic UI database
+        run: |
+          rm -f "$DATABASE_PATH" "$DATABASE_PATH-wal" "$DATABASE_PATH-shm"
+          npm run db:migrate
+          npm run ui:fixture
+      - run: npm run build
+      - name: Exercise UI in Chromium
+        run: npm run ui:proof
+      - name: Summarize captured UI state
+        if: always()
+        run: |
+          echo '### Chromium UI proof' >> "$GITHUB_STEP_SUMMARY"
+          if [ -d ui-proof ]; then
+            find ui-proof -maxdepth 1 -type f -printf '%f\n' | sort | sed 's/^/- `/' | sed 's/$/`/' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '- no UI artifact directory was produced' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload UI state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-proof-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ui-proof/
+            playwright-report/
+            test-results/
