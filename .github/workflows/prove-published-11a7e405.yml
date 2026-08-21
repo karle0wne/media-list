@@ -1,0 +1,49 @@
+name: prove published image 11a7e405
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    env:
+      APP_REVISION: 11a7e405fbad3c5efd159e6ddb15af2f30d545ac
+      IMAGE: ghcr.io/karle0wne/media-list:11a7e405fbad3c5efd159e6ddb15af2f30d545ac
+    steps:
+      - uses: actions/checkout@v6
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Pull and resolve immutable digest
+        run: |
+          set -Eeuo pipefail
+          docker pull "$IMAGE"
+          digest="$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')"
+          test -n "$digest"
+          echo "PUBLISHED_IMAGE=$digest"
+      - name: Start exact published image through Compose
+        run: |
+          set -Eeuo pipefail
+          cp .env.example .env
+          APP_IMAGE="$IMAGE" APP_BIND=127.0.0.1 APP_PORT=3000 APP_REVISION="$APP_REVISION" \
+            docker compose up -d --no-build --pull never
+          for _ in $(seq 1 60); do
+            body="$(curl -fsS http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+            if [[ "$body" == *"\"ok\":true"* && "$body" == *"\"revision\":\"${APP_REVISION}\""* ]]; then
+              echo "PUBLISHED_IMAGE_SMOKE=ok revision=$APP_REVISION"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Cleanup
+        if: always()
+        run: |
+          APP_IMAGE="$IMAGE" docker compose down --remove-orphans || true
+          sudo rm -rf data
+          rm -f .env
