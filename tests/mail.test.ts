@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { magicLinkMailConfigured, sendMagicLinkEmail } from "../src/lib/mail";
+import { magicLinkMailConfigured, missingMagicLinkMailConfiguration, sendMagicLinkEmail } from "../src/lib/mail";
+
+test("Brevo adapter reports exactly which magic-link configuration is missing", () => {
+  const previous = { key: process.env.BREVO_API_KEY, from: process.env.MAGIC_LINK_FROM, base: process.env.APP_BASE_URL };
+  process.env.APP_BASE_URL = "https://media.example.com";
+  delete process.env.BREVO_API_KEY;
+  delete process.env.MAGIC_LINK_FROM;
+  try {
+    assert.deepEqual(missingMagicLinkMailConfiguration(), ["BREVO_API_KEY", "MAGIC_LINK_FROM"]);
+    assert.equal(magicLinkMailConfigured(), false);
+  } finally {
+    if (previous.key === undefined) delete process.env.BREVO_API_KEY;
+    else process.env.BREVO_API_KEY = previous.key;
+    if (previous.from === undefined) delete process.env.MAGIC_LINK_FROM;
+    else process.env.MAGIC_LINK_FROM = previous.from;
+    if (previous.base === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = previous.base;
+  }
+});
 
 test("Brevo adapter sends the magic link with API-key authentication", async () => {
   const previous = { key: process.env.BREVO_API_KEY, from: process.env.MAGIC_LINK_FROM, base: process.env.APP_BASE_URL };
@@ -8,6 +26,7 @@ test("Brevo adapter sends the magic link with API-key authentication", async () 
   process.env.MAGIC_LINK_FROM = "login@example.com";
   process.env.APP_BASE_URL = "https://media.example.com";
   try {
+    assert.deepEqual(missingMagicLinkMailConfiguration(), []);
     assert.equal(magicLinkMailConfigured(), true);
     let captured: { input?: string; init?: RequestInit } = {};
     const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {

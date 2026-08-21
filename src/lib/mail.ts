@@ -1,9 +1,14 @@
 export type MailFetch = typeof fetch;
 
 const BREVO_EMAIL_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+const MAGIC_LINK_MAIL_ENV = ["APP_BASE_URL", "BREVO_API_KEY", "MAGIC_LINK_FROM"] as const;
+
+export function missingMagicLinkMailConfiguration() {
+  return MAGIC_LINK_MAIL_ENV.filter((name) => !process.env[name]?.trim());
+}
 
 export function magicLinkMailConfigured() {
-  return Boolean(process.env.BREVO_API_KEY?.trim() && process.env.MAGIC_LINK_FROM?.trim() && process.env.APP_BASE_URL?.trim());
+  return missingMagicLinkMailConfiguration().length === 0;
 }
 
 export async function sendMagicLinkEmail(email: string, loginUrl: string, fetchImpl: MailFetch = fetch) {

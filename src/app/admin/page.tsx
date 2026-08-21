@@ -1,7 +1,7 @@
 import { getDatabase } from "@/db";
 import { serviceState } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { magicLinkMailConfigured } from "@/lib/mail";
+import { missingMagicLinkMailConfiguration } from "@/lib/mail";
 import { listUsers } from "@/lib/services/users";
 import { CopyButton } from "@/components/copy-button";
 import { createInviteAction, createPasswordResetAction, setUserEmailAction, toggleUserAction } from "../actions";
@@ -15,7 +15,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const base = process.env.APP_BASE_URL?.replace(/\/$/, "") || "";
   const inviteUrl = invite ? `${base}/register?token=${invite}` : "";
   const resetUrl = reset ? `${base}/reset-password?token=${reset}` : "";
-  const magicEnabled = magicLinkMailConfigured();
+  const missingMagicLinkConfig = missingMagicLinkMailConfiguration();
   return (
     <section className="adminPage">
       <div className="pageTitle">
@@ -23,7 +23,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <form action={createInviteAction}><button type="submit">+ Add user</button></form>
       </div>
       {error && <p className="error">{error}</p>}
-      {!magicEnabled && <p className="error">Email sign-in is not active until APP_BASE_URL, BREVO_API_KEY, and MAGIC_LINK_FROM are configured.</p>}
+      {missingMagicLinkConfig.length > 0 && <p className="error">Email sign-in is not active. Missing configuration: {missingMagicLinkConfig.join(", ")}.</p>}
       {invite && <TokenPanel title="One-time registration link" help="Consumed after one successful registration." url={inviteUrl} />}
       {reset && <TokenPanel title="One-time password reset link" help="Bound to one existing account and consumed after password change." url={resetUrl} />}
       <div className="adminMeta"><span>Last successful backup</span><strong>{backup?.lastBackupAt ? backup.lastBackupAt.toISOString() : "Not recorded yet"}</strong></div>
