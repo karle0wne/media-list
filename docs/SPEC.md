@@ -1,6 +1,6 @@
 # media-list specification
 
-`media-list` is a small invite-only, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally closer to an interactive personal list than a content platform: one low-resource VPS, SQLite, a few known users, and no heavy data pipeline.
+`media-list` is a small self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally closer to an interactive personal list than a content platform: one low-resource VPS, SQLite, a few known users, and no heavy data pipeline.
 
 ## Invariants
 
@@ -8,11 +8,12 @@
 - Media identity is `external_source + external_id + external_sub_id`, not title similarity.
 - Shared canonical media metadata and per-user state are separate; one user cannot read or mutate another user's state.
 - TV seasons are separate positions identified by TMDB series id plus `season:N`.
-- Registration is invite-only and guarded by `MAX_USERS`.
-- A nullable unique email on an active existing user is the passwordless-login allowlist. Magic-login tokens are hashed at rest, short-lived, one-time, and revoked when the user is disabled or its email identity changes. Requests for unknown emails are indistinguishable from allowed requests at the public response surface.
-- GETting a magic-login URL never consumes its credential. Consumption happens only after an explicit POST from the landing page, so automated mail-link scanners cannot consume the login credential.
-- Passwordless email delivery is optional and uses a bounded external transactional-mail adapter; the application does not require a self-hosted SMTP/mail service. If delivery configuration is absent, the passwordless UI is disabled while password login/recovery remains operational.
-- Password reset is a distinct one-time token bound to an existing active user. Tokens are hashed at rest, expire, are consumed on success, and successful reset revokes prior sessions. Registration invites are never password-reset credentials.
+- Identity, service access, and service-scoped `ADMIN` / `USER` roles belong to shared IAM/SSO rather than provider-specific login code in this application.
+- OIDC `sub` is the durable external identity. During migration only, verified email may link that subject to an already-existing active local user; after binding, subject identity is authoritative. Unknown/unapproved identities fail closed.
+- The application consumes only roles intended for `media-list`; an administrator of this service does not implicitly become an administrator of any other service.
+- Successful external authentication creates the normal local application session. `media-list` owns domain authorization—what a role may do to media data—not upstream identity policy.
+- Until real production SSO is proven, legacy registration/password/recovery/magic-link paths may remain as rollback fallback. They are migration mechanics, not the target product contract, and must be removed in a later bounded change after SSO proof.
+- OIDC discovery/token calls have an application-owned deadline and use Authorization Code flow with PKCE, state, and nonce validation.
 - User state is status, score, medium-specific progress, and notes. Watch/play/reading time is not a shared domain field.
 - `COMPLETED` equals the known progress total whenever a total exists, including totals learned later by metadata enrichment.
 - Canonical CSV is deterministic and provider IDs are revalidated on import.
@@ -22,8 +23,8 @@
 - Manual Add is local-first: selecting a provider result persists identity/provisional metadata immediately; exact enrichment continues as durable SQLite state (`PENDING → READY` or `ERROR → Retry`).
 - Cover URLs are metadata; image bytes are not application state or backup data. Provider URLs are normalized to bounded thumbnails when the provider exposes such a transform.
 - Persisted media metadata is deliberately narrow: canonical identity, displayed title/year/link/cover variants, and enrichment state. Provider-only discovery fields remain transient unless the saved list needs them.
-- The application remains viable on one small VPS. Redis, PostgreSQL, external queues, caches, self-hosted mail servers, and microservices are not required.
-- Production data, SQLite files, backups, exports, credentials, reset tokens, invite tokens, and magic-login tokens never belong in Git.
+- The application remains viable on one small VPS. Redis, PostgreSQL, external queues, caches, self-hosted mail servers, and microservices are not required by `media-list` itself.
+- Production data, SQLite files, backups, exports, credentials, auth transaction values, and identity-provider secrets never belong in Git.
 
 ## Providers
 
@@ -47,8 +48,8 @@ Each row uses `title → metadata → notes`. Status, score, progress, and notes
 2. Quick Import: one title or supported provider URL per line → bounded provider discovery → review → save.
 3. Canonical CSV: strict provider-ID round trip preserving status/score/progress/notes, with synchronous revalidation.
 4. Markdown export: human-readable grouped snapshot; it is not an import contract.
-5. Account creation: admin-generated one-time registration invite.
-6. Passwordless login: admin assigns a unique email to an existing account → public request returns a generic response → configured transactional-mail adapter sends a short-lived link → GET renders confirmation without consuming → explicit POST consumes and creates the normal session.
-7. Password recovery: admin-generated one-time reset URL for an existing user; a locked-out operator can use `npm run admin:create-password-reset -- <username>` or the direct emergency `admin:set-password` command from the trusted runtime environment.
+5. Target sign-in: shared IAM authenticates the Google-backed identity and authorizes `media-list` access/role → OIDC callback validates the response → stable subject maps to the local domain user → normal application session.
+6. Transitional first binding: verified IAM email must match an existing active local account → persist stable OIDC subject → later logins bind by subject and refresh the effective service role.
+7. Legacy invite/password/recovery/magic-link routes remain only until production SSO has been proven and are then removed in a separate migration cleanup.
 
 Messy documents are transformed outside the application into Quick Import lines using the built-in GPT-5.6 helper prompt. The application does not add another LLM-specific import format.
