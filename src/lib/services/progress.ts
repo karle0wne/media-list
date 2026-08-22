@@ -10,5 +10,5 @@ export async function updateUserProgress(db: AppDb, userId: string, id: string, 
   if (!row) return;
   if (row.progressTotal != null && progressCurrent > row.progressTotal) throw new Error(`Progress cannot exceed the known total (${row.progressTotal})`);
   const status = row.status === "COMPLETED" && row.progressTotal != null && progressCurrent !== row.progressTotal ? "IN_PROGRESS" as const : row.status;
-  await db.update(userMedia).set({ progressCurrent, status }).where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)));
+  await db.update(userMedia).set({ progressCurrent, status, updatedAt: new Date() }).where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)));
 }
