@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { MediaSort, SortDirection } from "@/lib/services/media";
 import type { MediaStatus, MediaType } from "@/lib/types";
 import { LibraryGrid } from "./library-grid";
@@ -18,6 +18,7 @@ type StatusLink = {
 type ViewMode = "table" | "grid";
 
 const VIEW_MODE_STORAGE_KEY = "media-list:view-mode:v1";
+const VIEW_MODE_EVENT = "media-list:view-mode-change";
 
 export function LibraryWorkspace({
   items,
@@ -46,18 +47,15 @@ export function LibraryWorkspace({
   query: string;
   hiddenSearchParams: Array<[string, string]>;
 }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
-    if (stored === "table" || stored === "grid") {
-      setViewMode(stored);
-    }
-  }, []);
+  const viewMode = useSyncExternalStore(
+    subscribeToViewMode,
+    readViewMode,
+    defaultViewMode,
+  );
 
   function chooseView(mode: ViewMode) {
-    setViewMode(mode);
     window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    window.dispatchEvent(new Event(VIEW_MODE_EVENT));
   }
 
   return (
@@ -148,6 +146,24 @@ export function LibraryWorkspace({
       )}
     </>
   );
+}
+
+function subscribeToViewMode(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(VIEW_MODE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(VIEW_MODE_EVENT, onChange);
+  };
+}
+
+function readViewMode(): ViewMode {
+  const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+  return stored === "grid" ? "grid" : "table";
+}
+
+function defaultViewMode(): ViewMode {
+  return "table";
 }
 
 function statusClass(status: MediaStatus | null) {
