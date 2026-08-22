@@ -1,2 +1,28 @@
-import {redirect} from "next/navigation";import {currentUser} from "@/lib/auth";import {magicLinkMailConfigured} from "@/lib/mail";import {oidcConfigured} from "@/lib/oidc";import {loginAction,requestMagicLinkAction} from "../actions";
-export default async function LoginPage({searchParams}:{searchParams:Promise<{error?:string;magic?:string}>}){if(await currentUser())redirect("/");const{error,magic}=await searchParams;const oidcEnabled=oidcConfigured();const magicEnabled=magicLinkMailConfigured();return <section className="narrow authPage"><h1>Sign in</h1><p className="muted">This instance is access-controlled.</p>{error&&<p className="error">{error}</p>}{magic==="sent"&&<p className="success">If that email is allowed, a sign-in link has been sent.</p>}{oidcEnabled&&<div className="stack card authPrimary"><div><strong>Central sign-in</strong><p className="muted authHelp">Use the account allowed by the central IAM service.</p></div><a className="button" href="/login/oidc">Continue with central sign-in</a></div>}{magicEnabled&&<details className="authFallback" open={!oidcEnabled}><summary>Email link fallback</summary><form action={requestMagicLinkAction} className="stack card"><label>Email<input name="email" type="email" autoComplete="email" required/></label><button type="submit">Email me a sign-in link</button></form></details>}<details className="authFallback" open={!oidcEnabled&&!magicEnabled}><summary>Password sign in fallback</summary><form action={loginAction} className="stack card"><label>Username<input name="username" autoComplete="username" required/></label><label>Password<input name="password" type="password" autoComplete="current-password" required/></label><button type="submit">Sign in</button></form></details></section>;}
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth";
+import { missingOidcConfiguration } from "@/lib/oidc";
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (await currentUser()) redirect("/");
+  const { error } = await searchParams;
+  const missing = missingOidcConfiguration();
+
+  return (
+    <section className="narrow authPage">
+      <h1>Sign in</h1>
+      <p className="muted">Access is managed by the central identity service.</p>
+      {error && <p className="error">{error}</p>}
+      {missing.length > 0 ? (
+        <p className="error">Google sign-in is temporarily unavailable.</p>
+      ) : (
+        <div className="stack card authPrimary">
+          <div>
+            <strong>Google</strong>
+            <p className="muted authHelp">Use a Google account that has access to Media List.</p>
+          </div>
+          <a className="button" href="/login/oidc">Continue with Google</a>
+        </div>
+      )}
+    </section>
+  );
+}
