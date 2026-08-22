@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_VISIBLE_COLUMNS, areAllVisibleSelected, parseVisibleColumns, reconcileSelection, serializeVisibleColumns } from "../src/lib/library-view";
+import { DEFAULT_LIBRARY_SORT, DEFAULT_VISIBLE_COLUMNS, areAllVisibleSelected, parseVisibleColumns, reconcileSelection, serializeVisibleColumns } from "../src/lib/library-view";
 
 test("selection is scoped to currently visible rows", () => {
   const selected = new Set(["old-a", "visible-b"]);
@@ -15,5 +15,9 @@ test("visible columns distinguish defaults from explicitly empty", () => {
   assert.deepEqual(parseVisibleColumns("none"), []);
   assert.equal(serializeVisibleColumns([]), "none");
   assert.equal(serializeVisibleColumns(DEFAULT_VISIBLE_COLUMNS), undefined);
-  assert.deepEqual(parseVisibleColumns("status,added"), ["status", "added"]);
+  assert.deepEqual(parseVisibleColumns("status,added,updated"), ["status", "added", "updated"]);
+});
+
+test("library defaults to latest user update", () => {
+  assert.equal(DEFAULT_LIBRARY_SORT, "updated");
 });
