@@ -16,6 +16,11 @@ jobs:
       COOKIE_SECURE: "false"
       MAX_USERS: "5"
       SESSION_TTL_DAYS: "1"
+      OIDC_ISSUER_URL: https://iam.example.invalid
+      OIDC_CLIENT_ID: media-list-ui-proof
+      OIDC_CLIENT_SECRET: ui-proof-not-sent
+      OIDC_ADMIN_ROLE: media-list:admin
+      OIDC_USER_ROLE: media-list:user
       BREVO_API_KEY: xkeysib-ui-proof-not-sent
       MAGIC_LINK_FROM: login@example.com
     steps:
