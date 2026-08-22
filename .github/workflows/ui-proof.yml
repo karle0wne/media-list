@@ -24,8 +24,6 @@ jobs:
       OIDC_CLIENT_SECRET: ui-proof-secret-not-used
       OIDC_ADMIN_ROLE: media-list-admin
       OIDC_USER_ROLE: media-list-user
-      BREVO_API_KEY: xkeysib-ui-proof-not-sent
-      MAGIC_LINK_FROM: login@example.com
     steps:
       - uses: actions/checkout@v6
         with:

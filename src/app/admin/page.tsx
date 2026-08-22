@@ -1,61 +1,36 @@
 import { getDatabase } from "@/db";
 import { serviceState } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { missingMagicLinkMailConfiguration } from "@/lib/mail";
 import { listUsers } from "@/lib/services/users";
-import { CopyButton } from "@/components/copy-button";
-import { createInviteAction, createPasswordResetAction, setUserEmailAction, toggleUserAction } from "../actions";
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ invite?: string; reset?: string; error?: string }> }) {
+export default async function AdminPage() {
   await requireAdmin();
   const db = getDatabase().db;
   const users = await listUsers(db);
   const backup = (await db.select().from(serviceState).limit(1))[0] ?? null;
-  const { invite, reset, error } = await searchParams;
-  const base = process.env.APP_BASE_URL?.replace(/\/$/, "") || "";
-  const inviteUrl = invite ? `${base}/register?token=${invite}` : "";
-  const resetUrl = reset ? `${base}/reset-password?token=${reset}` : "";
-  const missingMagicLinkConfig = missingMagicLinkMailConfiguration();
+
   return (
     <section className="adminPage">
       <div className="pageTitle">
-        <div><h1>Users</h1><p className="muted">Assigned emails are the explicit magic-link allowlist. Password recovery remains available independently.</p></div>
-        <form action={createInviteAction}><button type="submit">+ Add user</button></form>
+        <div>
+          <h1>Users</h1>
+          <p className="muted">Identity, access and roles are managed centrally. This page shows the local business identities linked by OIDC.</p>
+        </div>
       </div>
-      {error && <p className="error">{error}</p>}
-      {missingMagicLinkConfig.length > 0 && <p className="error">Email sign-in is not active. Missing configuration: {missingMagicLinkConfig.join(", ")}.</p>}
-      {invite && <TokenPanel title="One-time registration link" help="Consumed after one successful registration." url={inviteUrl} />}
-      {reset && <TokenPanel title="One-time password reset link" help="Bound to one existing account and consumed after password change." url={resetUrl} />}
       <div className="adminMeta"><span>Last successful backup</span><strong>{backup?.lastBackupAt ? backup.lastBackupAt.toISOString() : "Not recorded yet"}</strong></div>
       <div className="tableWrap adminUsersTable">
         <table>
-          <thead><tr><th>User</th><th>Email allowlist</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
           <tbody>{users.map((user) => (
             <tr key={user.id}>
               <td data-label="User">{user.username}</td>
-              <td data-label="Email">
-                <form action={setUserEmailAction} className="adminEmailForm">
-                  <input type="hidden" name="userId" value={user.id} />
-                  <input name="email" type="email" defaultValue={user.email ?? ""} placeholder="name@example.com" aria-label={`Email for ${user.username}`} />
-                  <button className="secondary" type="submit">Save</button>
-                </form>
-              </td>
+              <td data-label="Email">{user.email ?? "—"}</td>
               <td data-label="Role">{user.role}</td>
               <td data-label="Status">{user.active ? "active" : "disabled"}</td>
-              <td data-label="Actions" className="adminActionCell">
-                <div className="adminActions">
-                  {user.active && <form action={createPasswordResetAction}><input type="hidden" name="userId" value={user.id} /><button className="secondary" type="submit">Reset password</button></form>}
-                  {user.role !== "ADMIN" && <form action={toggleUserAction}><input type="hidden" name="userId" value={user.id} /><input type="hidden" name="active" value={String(!user.active)} /><button className={user.active ? "danger" : "secondary"} type="submit">{user.active ? "Disable user" : "Enable user"}</button></form>}
-                </div>
-              </td>
             </tr>
           ))}</tbody>
         </table>
       </div>
     </section>
   );
-}
-
-function TokenPanel({ title, help, url }: { title: string; help: string; url: string }) {
-  return <div className="invitePanel"><div><strong>{title}</strong><p className="muted">{help}</p><code>{url}</code></div><CopyButton text={url} label="Copy link" /></div>;
 }
