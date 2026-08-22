@@ -1,6 +1,6 @@
 # media-list
 
-`media-list` is a small invite-only, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is designed to feel like editing a personal list on one low-resource VPS, not operating a content platform.
+`media-list` is a small self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is designed to feel like editing a personal list on one low-resource VPS, not operating a content platform.
 
 Provider identity is canonical identity: `external_source + external_id + external_sub_id`. Shared provider metadata is stored once; status, score, medium-specific progress, and notes remain private per user. External provider failures never invalidate the saved list.
 
@@ -8,7 +8,8 @@ See [docs/SPEC.md](docs/SPEC.md) for product invariants and [docs/INTERACTION-DE
 
 ## Capabilities
 
-- Invite-only local accounts with `MAX_USERS`, optional allowlisted magic-link sign-in, copyable registration links, and separate one-time password-reset links.
+- Central OIDC SSO transition with stable external subject binding and service-scoped `ADMIN` / `USER` roles.
+- Existing invite/password/magic-link paths retained temporarily as migration fallback until production SSO is proven.
 - AniList anime/donghua, TMDB movies/TV, Open Library books, and RAWG games.
 - TV seasons as separate positions using `TMDB series id + season:N`.
 - Dense MAL-inspired Catppuccin table: row-first inline editing for status/score/progress/notes, sortable/configurable columns, filters, and user-scoped bulk removal.
@@ -34,19 +35,13 @@ Provider HTTP requests have application-owned deadlines. Rate limits and tempora
 
 Normal Add is category → canonical provider search → exact selection → immediate local save → durable exact enrichment. Quick Import accepts one title or supported provider URL per line and stages candidates for review. Canonical CSV is the strict machine round trip; Markdown export is human-readable archival.
 
-Admins create new accounts with one-time registration links. An admin may assign one unique email to an existing account; assigned emails are the explicit allowlist for passwordless login. When `BREVO_API_KEY`, a registered and verified Brevo sender in `MAGIC_LINK_FROM`, and public `APP_BASE_URL` are configured, the login page sends a short-lived one-time link through the Brevo transactional-email HTTP API. Unknown emails receive the same generic response and never create a credential. Opening the email URL does not consume the credential; the landing page requires an explicit Continue action so mail-security scanners cannot burn the link.
+Authentication is migrating to shared infrastructure IAM/SSO. When `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ADMIN_ROLE`, `OIDC_USER_ROLE`, and public `APP_BASE_URL` are configured, `/login` presents central SSO as the primary path. The application uses the standard OpenID Connect Authorization Code flow with PKCE, state, and nonce validation.
 
-A custom domain is not an application requirement for this path: the application only requires a verified Brevo sender address. Domain authentication may still improve deliverability, but it is external mail-provider configuration rather than media-list infrastructure.
+Central IAM owns identity, whether the identity may access `media-list`, and the service-scoped role. `media-list` owns only domain authorization: what `ADMIN` and `USER` may do with media data. A `media-list` admin role does not imply administration of any other service.
 
-Password login and password recovery remain independent fallback paths. An admin can create a reset link for an existing user. A locked-out operator can recover the admin account from the trusted runtime environment:
+During the migration phase, the first successful OIDC login must match an existing active local user by verified email. The application then persists the stable OIDC `sub` and uses that subject for subsequent identity binding; email is not the durable identity key. Unknown identities fail closed. The IAM role refreshes the local effective `ADMIN` / `USER` role.
 
-```bash
-npm run admin:create-password-reset -- admin
-# or emergency direct rotation:
-npm run admin:set-password -- admin 'a-new-long-password'
-```
-
-The reset-link command requires `APP_BASE_URL`, prints the one-time URL locally, and does not depend on email delivery.
+The old registration-invite, username/password, password-recovery, admin-assigned email, and Brevo magic-link implementation remains only as a rollback/fallback surface until real production SSO has been proven. It is not the target account model and should be removed in a later bounded change after successful IAM rollout.
 
 ## Local development
 
@@ -59,6 +54,8 @@ npm run db:migrate
 npm run admin:create -- admin 'use-a-long-local-password'
 npm run dev
 ```
+
+The local admin/password bootstrap remains available during the transition and is useful when no OIDC provider is configured.
 
 Useful checks:
 
@@ -87,7 +84,7 @@ Compose applies pending migrations before starting Next.js. SQLite lives at `./d
 
 ## Database and maintenance
 
-Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also owns bounded compatibility cleanup for legacy columns, user email identity, password-reset credentials, and magic-login credentials. Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
+Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint also owns bounded compatibility cleanup for legacy columns and auth-transition identity columns. Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
 
 ## Backup and restore
 
@@ -95,4 +92,4 @@ The application owns SQLite backup/restore correctness while an external control
 
 ## Runtime contract
 
-`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, invite tokens, password-reset tokens, and magic-login tokens must never be committed.
+`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports, credentials, auth transaction values, and identity-provider secrets must never be committed.
