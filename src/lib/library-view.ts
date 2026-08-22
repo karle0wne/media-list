@@ -1,12 +1,12 @@
 import type { MediaSort, SortDirection } from "./services/media";
 
-export type VisibleColumn = "status" | "score" | "progress" | "type" | "added";
+export type VisibleColumn = "status" | "score" | "progress" | "type" | "added" | "updated";
 
 export const DEFAULT_VISIBLE_COLUMNS: VisibleColumn[] = ["status", "score", "progress", "type"];
-export const DEFAULT_LIBRARY_SORT: MediaSort = "created";
+export const DEFAULT_LIBRARY_SORT: MediaSort = "updated";
 export const DEFAULT_LIBRARY_DIRECTION: SortDirection = "desc";
 
-const allowedColumns = new Set<VisibleColumn>(["status", "score", "progress", "type", "added"]);
+const allowedColumns = new Set<VisibleColumn>(["status", "score", "progress", "type", "added", "updated"]);
 
 export function parseVisibleColumns(value?: string): VisibleColumn[] {
   if (!value) return [...DEFAULT_VISIBLE_COLUMNS];
