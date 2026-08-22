@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   chromium:
     runs-on: ubuntu-latest
@@ -25,6 +28,8 @@ jobs:
       MAGIC_LINK_FROM: login@example.com
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
       - uses: actions/setup-node@v6
         with:
           node-version: '24.15.0'
@@ -45,6 +50,7 @@ jobs:
         if: always()
         run: |
           echo '### Chromium UI proof' >> "$GITHUB_STEP_SUMMARY"
+          echo '- exact source revision: `'$SOURCE_REVISION'`' >> "$GITHUB_STEP_SUMMARY"
           if [ -d ui-proof ]; then
             find ui-proof -maxdepth 1 -type f -printf '%f\n' | sort | sed 's/^/- `/' | sed 's/$/`/' >> "$GITHUB_STEP_SUMMARY"
           else
@@ -54,7 +60,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-proof-${{ github.sha }}
+          name: ui-proof-${{ env.SOURCE_REVISION }}
           if-no-files-found: error
           retention-days: 14
           path: |
