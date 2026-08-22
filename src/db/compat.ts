@@ -4,7 +4,9 @@ export function applySchemaCompatibility(db: DatabaseSync) {
   if (!hasTable(db, "users")) return;
 
   addColumnIfMissing(db, "users", "email", "TEXT");
+  addColumnIfMissing(db, "users", "external_subject", "TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_uq ON users(email)");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_external_subject_uq ON users(external_subject)");
   db.exec(`
     CREATE TABLE IF NOT EXISTS magic_login_tokens (
       id TEXT PRIMARY KEY NOT NULL,
