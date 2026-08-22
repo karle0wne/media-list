@@ -1,0 +1,440 @@
+.libraryCommandBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+
+.addMediaButton {
+  justify-self: start;
+  padding: 8px 13px;
+  font-weight: 850;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.addMediaButton:hover {
+  filter: brightness(1.05);
+}
+
+.libraryStatusTabs {
+  justify-self: center;
+  justify-content: safe center;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  border-bottom: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.libraryStatusTabs .statusTab {
+  --tab-status: var(--accent);
+  position: relative;
+  margin: 0;
+  padding: 8px 11px;
+  border-bottom: 0;
+  color: var(--muted);
+}
+
+.libraryStatusTabs .statusTab::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tab-status) 42%, transparent);
+  opacity: 0.55;
+}
+
+.libraryStatusTabs .statusTab:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.libraryStatusTabs .statusTab.active {
+  color: var(--text);
+  border-bottom: 0;
+}
+
+.libraryStatusTabs .statusTab.active::after {
+  background: var(--tab-status);
+  opacity: 0.95;
+}
+
+.libraryStatusTabs .status-in-progress {
+  --tab-status: var(--status-progress);
+}
+
+.libraryStatusTabs .status-completed {
+  --tab-status: var(--status-completed);
+}
+
+.libraryStatusTabs .status-on-hold {
+  --tab-status: var(--status-hold);
+}
+
+.libraryStatusTabs .status-dropped {
+  --tab-status: var(--status-dropped);
+}
+
+.libraryStatusTabs .status-planned {
+  --tab-status: var(--status-planned);
+}
+
+.libraryCommandControls,
+.librarySettingsTriggers,
+.viewSwitch {
+  display: flex;
+  align-items: center;
+}
+
+.libraryCommandControls {
+  justify-self: end;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.librarySettingsTriggers {
+  gap: 5px;
+}
+
+.toolbarButton,
+.toolbarIconButton,
+.viewModeButton {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.toolbarButton.active {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.toolbarIconButton {
+  width: 32px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.viewSwitch {
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.viewModeButton {
+  width: 30px;
+  min-height: 26px;
+  padding: 2px 5px;
+  border: 0 !important;
+  border-radius: 5px;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.viewModeButton.active {
+  background: var(--panel-2) !important;
+  color: var(--accent) !important;
+}
+
+.librarySearch {
+  display: flex;
+  gap: 7px;
+  width: min(520px, 100%);
+  margin: 0 auto 6px;
+}
+
+.librarySearch input:not([type="hidden"]) {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.librarySearch button {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.compactSettingsDialog {
+  width: min(500px, calc(100vw - 28px));
+}
+
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  width: min(72vw, 1240px);
+  margin: 10px auto 0;
+  align-items: start;
+}
+
+.mediaGridCard {
+  --card-status: var(--status-planned);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--card-status));
+  border-top: 2px solid color-mix(in srgb, var(--card-status) 65%, var(--border));
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+}
+
+.mediaGridCard.status-in-progress {
+  --card-status: var(--status-progress);
+}
+
+.mediaGridCard.status-completed {
+  --card-status: var(--status-completed);
+}
+
+.mediaGridCard.status-on-hold {
+  --card-status: var(--status-hold);
+}
+
+.mediaGridCard.status-dropped {
+  --card-status: var(--status-dropped);
+}
+
+.mediaGridCard.status-planned {
+  --card-status: var(--status-planned);
+}
+
+.mediaGridCoverLink {
+  display: block;
+  background: var(--panel-2);
+}
+
+.mediaGridCover {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: var(--panel-2);
+}
+
+.mediaGridCoverPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mediaGridBody {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px 10px;
+}
+
+.mediaGridTitle {
+  display: -webkit-box;
+  min-height: 2.7em;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.35;
+  text-decoration: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mediaGridTitle:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.mediaGridMeta,
+.mediaGridProgress,
+.mediaGridUpdated {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediaGridMetrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gridStatusBadge {
+  --badge-status: var(--status-planned);
+  overflow: hidden;
+  max-width: 72%;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--badge-status) 42%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--badge-status) 10%, transparent);
+  color: color-mix(in srgb, var(--badge-status) 76%, var(--text));
+  font-size: 9px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gridStatusBadge.status-in-progress {
+  --badge-status: var(--status-progress);
+}
+
+.gridStatusBadge.status-completed {
+  --badge-status: var(--status-completed);
+}
+
+.gridStatusBadge.status-on-hold {
+  --badge-status: var(--status-hold);
+}
+
+.gridStatusBadge.status-dropped {
+  --badge-status: var(--status-dropped);
+}
+
+.gridStatusBadge.status-planned {
+  --badge-status: var(--status-planned);
+}
+
+.gridScore {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mediaGridUpdated {
+  padding-top: 1px;
+  font-size: 9px;
+  opacity: 0.86;
+}
+
+@media (min-width: 1600px) {
+  .libraryGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .libraryCommandBar {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 7px 10px;
+  }
+
+  .addMediaButton {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .libraryCommandControls {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .libraryStatusTabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .libraryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .libraryCommandBar {
+    margin-bottom: 6px;
+  }
+
+  .addMediaButton {
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+
+  .libraryCommandControls {
+    gap: 4px;
+  }
+
+  .librarySettingsTriggers {
+    gap: 3px;
+  }
+
+  .toolbarButton {
+    padding: 5px 7px;
+    font-size: 11px;
+  }
+
+  .toolbarIconButton {
+    width: 29px;
+    min-height: 29px;
+  }
+
+  .viewSwitch {
+    padding: 1px;
+  }
+
+  .viewModeButton {
+    width: 27px;
+    min-height: 27px;
+    font-size: 15px;
+  }
+
+  .libraryStatusTabs .statusTab {
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+
+  .libraryStatusTabs .statusTab::after {
+    left: 9px;
+    right: 9px;
+  }
+
+  .librarySearch {
+    margin-bottom: 4px;
+  }
+
+  .libraryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .mediaGridBody {
+    gap: 4px;
+    padding: 7px 7px 8px;
+  }
+
+  .mediaGridTitle {
+    min-height: 2.65em;
+    font-size: 12px;
+  }
+
+  .mediaGridMeta,
+  .mediaGridProgress,
+  .gridScore {
+    font-size: 9px;
+  }
+
+  .gridStatusBadge,
+  .mediaGridUpdated {
+    font-size: 8px;
+  }
+}
