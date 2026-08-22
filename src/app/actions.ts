@@ -1,12 +1,138 @@
 "use server";
-import {redirect} from "next/navigation";import {getDatabase} from "@/db";import {createSession,deleteCurrentSession,requireAdmin,requireSessionToken,requireUser} from "@/lib/auth";import {decodeCandidateToken} from "@/lib/candidate-token";import {scheduleMediaEnrichment} from "@/lib/enrichment-runtime";import {magicLinkMailConfigured,sendMagicLinkEmail} from "@/lib/mail";import {authenticate,consumeMagicLogin,createInvite,createMagicLogin,createPasswordReset,registerWithInvite,resetPasswordWithToken,revokeMagicLogin,setUserActive,setUserEmail} from "@/lib/services/users";import {addSelectedMediaToUser,deleteUserMediaMany,retryMediaMetadata,updateUserMedia} from "@/lib/services/media";import {updateUserProgress} from "@/lib/services/progress";import {createQuickImport,confirmBatch} from "@/lib/services/imports";import {importCanonical} from "@/lib/services/canonical";import {parseMediaStatus,parseOptionalNonNegativeInteger} from "@/lib/user-media";
-function str(form:FormData,key:string){const value=form.get(key);return typeof value==="string"?value.trim():"";}function goError(path:string,error:unknown):never{const message=error instanceof Error?error.message:"Unexpected error";redirect(`${path}${path.includes("?")?"&":"?"}error=${encodeURIComponent(message)}`);}function returnTo(form:FormData){const value=str(form,"returnTo");return value.startsWith("/")&&!value.startsWith("//")?value:"/";}
-export async function loginAction(form:FormData){const{db}=getDatabase();const user=await authenticate(db,str(form,"username"),str(form,"password"));if(!user)redirect("/login?error=Invalid%20username%20or%20password");await createSession(user.id);redirect("/");}
-export async function requestMagicLinkAction(form:FormData){if(!magicLinkMailConfigured())redirect("/login");const db=getDatabase().db;try{const request=await createMagicLogin(db,str(form,"email"));if(request){const loginUrl=new URL("/login/magic",process.env.APP_BASE_URL!);loginUrl.searchParams.set("token",request.token);try{await sendMagicLinkEmail(request.email,loginUrl.toString());}catch(error){await revokeMagicLogin(db,request.token);console.error("Magic-link delivery failed",error);}}}catch(error){console.error("Magic-link request failed",error);}redirect("/login?magic=sent");}
-export async function consumeMagicLoginAction(form:FormData){const token=str(form,"token");const userId=await consumeMagicLogin(getDatabase().db,token);if(!userId)redirect(`/login/magic?token=${encodeURIComponent(token)}&error=This%20sign-in%20link%20is%20invalid%20or%20expired`);await createSession(userId);redirect("/");}
-export async function logoutAction(){await deleteCurrentSession();redirect("/login");}export async function registerAction(form:FormData){const token=str(form,"token");try{const id=await registerWithInvite(getDatabase().db,token,str(form,"username"),str(form,"password"));await createSession(id);}catch(error){goError(`/register?token=${encodeURIComponent(token)}`,error);}redirect("/");}
-export async function createInviteAction(){const admin=await requireAdmin();let token:string;try{token=await createInvite(getDatabase().db,admin.id);}catch(error){goError("/admin",error);}redirect(`/admin?invite=${encodeURIComponent(token)}`);}export async function setUserEmailAction(form:FormData){await requireAdmin();try{await setUserEmail(getDatabase().db,str(form,"userId"),str(form,"email")||null);}catch(error){goError("/admin",error);}redirect("/admin");}export async function toggleUserAction(form:FormData){const admin=await requireAdmin();const userId=str(form,"userId");if(userId===admin.id)redirect("/admin?error=You%20cannot%20disable%20yourself");await setUserActive(getDatabase().db,userId,str(form,"active")==="true");redirect("/admin");}
-export async function createPasswordResetAction(form:FormData){const admin=await requireAdmin();const userId=str(form,"userId");let token:string;try{token=await createPasswordReset(getDatabase().db,userId,admin.id);}catch(error){goError("/admin",error);}redirect(`/admin?reset=${encodeURIComponent(token)}`);}export async function resetPasswordAction(form:FormData){const token=str(form,"token");const password=str(form,"password");const confirm=str(form,"confirmPassword");if(password!==confirm)redirect(`/reset-password?token=${encodeURIComponent(token)}&error=Passwords%20do%20not%20match`);let userId:string;try{userId=await resetPasswordWithToken(getDatabase().db,token,password);await createSession(userId);}catch(error){goError(`/reset-password?token=${encodeURIComponent(token)}`,error);}redirect("/");}
-export async function addCandidateAction(form:FormData){const user=await requireUser();try{const sessionToken=await requireSessionToken();const candidate=decodeCandidateToken(str(form,"candidateToken"),sessionToken);if(!candidate)throw new Error("Candidate expired or was changed; search again");const result=await addSelectedMediaToUser(getDatabase().db,user.id,candidate);if(result.needsEnrichment)scheduleMediaEnrichment(result.item.id);}catch(error){goError("/media/new",error);}redirect("/");}export async function retryMetadataAction(form:FormData){const user=await requireUser();const mediaId=str(form,"mediaId");if(await retryMediaMetadata(getDatabase().db,user.id,mediaId))scheduleMediaEnrichment(mediaId);redirect(returnTo(form));}
-export async function quickStatusAction(form:FormData){const user=await requireUser();try{const status=parseMediaStatus(str(form,"status"),true)!;await updateUserMedia(getDatabase().db,user.id,str(form,"id"),{status});}catch(error){goError(returnTo(form),error);}redirect(returnTo(form));}export async function quickScoreAction(form:FormData){const user=await requireUser();try{const score=parseOptionalNonNegativeInteger(str(form,"score"),"score",10);await updateUserMedia(getDatabase().db,user.id,str(form,"id"),{score});}catch(error){goError(returnTo(form),error);}redirect(returnTo(form));}export async function quickProgressAction(form:FormData){const user=await requireUser();try{const progressCurrent=parseOptionalNonNegativeInteger(str(form,"progressCurrent"),"progress_current")??0;await updateUserProgress(getDatabase().db,user.id,str(form,"id"),progressCurrent);}catch(error){goError(returnTo(form),error);}redirect(returnTo(form));}export async function quickNotesAction(form:FormData){const user=await requireUser();try{await updateUserMedia(getDatabase().db,user.id,str(form,"id"),{notes:str(form,"notes")||null});}catch(error){goError(returnTo(form),error);}redirect(returnTo(form));}export async function deleteMediaManyAction(form:FormData){const user=await requireUser();const ids=form.getAll("id").filter((value):value is string=>typeof value==="string");await deleteUserMediaMany(getDatabase().db,user.id,ids);redirect(returnTo(form));}
-export async function quickImportAction(form:FormData){const user=await requireUser();let batchId:string;try{batchId=await createQuickImport(getDatabase().db,user.id,str(form,"text"));}catch(error){goError("/import",error);}redirect(`/import/review/${batchId}`);}export async function canonicalImportAction(form:FormData){const user=await requireUser();let summary:string;try{const file=form.get("file");if(!(file instanceof File)||file.size===0)throw new Error("Choose a canonical CSV file");if(file.size>2_000_000)throw new Error("Canonical CSV is too large (2 MB max)");const report=await importCanonical(getDatabase().db,user.id,await file.text());summary=`Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0]?`; ${report.errors[0]}`:""}`;}catch(error){goError("/import",error);}redirect(`/import?result=${encodeURIComponent(summary)}`);}export async function confirmImportAction(form:FormData){const user=await requireUser();const batchId=str(form,"batchId");const selections:Record<string,string>={};for(const[key,value]of form.entries())if(key.startsWith("row:")&&typeof value==="string")selections[key.slice(4)]=value;const report=await confirmBatch(getDatabase().db,user.id,batchId,selections);redirect(`/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}`)}`);}
+
+import { redirect } from "next/navigation";
+import { getDatabase } from "@/db";
+import { deleteCurrentSession, requireSessionToken, requireUser } from "@/lib/auth";
+import { decodeCandidateToken } from "@/lib/candidate-token";
+import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
+import { addSelectedMediaToUser, deleteUserMediaMany, retryMediaMetadata, updateUserMedia } from "@/lib/services/media";
+import { updateUserProgress } from "@/lib/services/progress";
+import { createQuickImport, confirmBatch } from "@/lib/services/imports";
+import { importCanonical } from "@/lib/services/canonical";
+import { parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
+
+function str(form: FormData, key: string) {
+  const value = form.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function goError(path: string, error: unknown): never {
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
+}
+
+function returnTo(form: FormData) {
+  const value = str(form, "returnTo");
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
+export async function logoutAction() {
+  await deleteCurrentSession();
+  redirect("/login");
+}
+
+export async function addCandidateAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const sessionToken = await requireSessionToken();
+    const candidate = decodeCandidateToken(str(form, "candidateToken"), sessionToken);
+    if (!candidate) throw new Error("Candidate expired or was changed; search again");
+    const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
+    if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
+  } catch (error) {
+    goError("/media/new", error);
+  }
+  redirect("/");
+}
+
+export async function retryMetadataAction(form: FormData) {
+  const user = await requireUser();
+  const mediaId = str(form, "mediaId");
+  if (await retryMediaMetadata(getDatabase().db, user.id, mediaId)) scheduleMediaEnrichment(mediaId);
+  redirect(returnTo(form));
+}
+
+export async function quickStatusAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const status = parseMediaStatus(str(form, "status"), true)!;
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { status });
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
+}
+
+export async function quickScoreAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const score = parseOptionalNonNegativeInteger(str(form, "score"), "score", 10);
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { score });
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
+}
+
+export async function quickProgressAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    const progressCurrent = parseOptionalNonNegativeInteger(str(form, "progressCurrent"), "progress_current") ?? 0;
+    await updateUserProgress(getDatabase().db, user.id, str(form, "id"), progressCurrent);
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
+}
+
+export async function quickNotesAction(form: FormData) {
+  const user = await requireUser();
+  try {
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { notes: str(form, "notes") || null });
+  } catch (error) {
+    goError(returnTo(form), error);
+  }
+  redirect(returnTo(form));
+}
+
+export async function deleteMediaManyAction(form: FormData) {
+  const user = await requireUser();
+  const ids = form.getAll("id").filter((value): value is string => typeof value === "string");
+  await deleteUserMediaMany(getDatabase().db, user.id, ids);
+  redirect(returnTo(form));
+}
+
+export async function quickImportAction(form: FormData) {
+  const user = await requireUser();
+  let batchId: string;
+  try {
+    batchId = await createQuickImport(getDatabase().db, user.id, str(form, "text"));
+  } catch (error) {
+    goError("/import", error);
+  }
+  redirect(`/import/review/${batchId}`);
+}
+
+export async function canonicalImportAction(form: FormData) {
+  const user = await requireUser();
+  let summary: string;
+  try {
+    const file = form.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new Error("Choose a canonical CSV file");
+    if (file.size > 2_000_000) throw new Error("Canonical CSV is too large (2 MB max)");
+    const report = await importCanonical(getDatabase().db, user.id, await file.text());
+    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0] ? `; ${report.errors[0]}` : ""}`;
+  } catch (error) {
+    goError("/import", error);
+  }
+  redirect(`/import?result=${encodeURIComponent(summary)}`);
+}
+
+export async function confirmImportAction(form: FormData) {
+  const user = await requireUser();
+  const batchId = str(form, "batchId");
+  const selections: Record<string, string> = {};
+  for (const [key, value] of form.entries()) if (key.startsWith("row:") && typeof value === "string") selections[key.slice(4)] = value;
+  const report = await confirmBatch(getDatabase().db, user.id, batchId, selections);
+  redirect(`/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}`)}`);
+}
