@@ -37,7 +37,7 @@
 
 ## Library interaction
 
-Status tabs are primary navigation. Search stays visible; media-type/score/note filters, sorting, direction, and optional columns live in Settings. Default sorting is newest `Date added` first. `Clear filters` clears filtering state without resetting sort/columns; media types and visible columns have independent reset-to-default actions.
+Status tabs are primary navigation. Search stays visible; media-type/score/note filters, sorting, direction, and optional columns live in Settings. Default sorting is newest `Date updated` first; this timestamp changes with user-owned list edits, while `Date added` remains available as a separate optional column and sort key. Media types and visible columns have independent reset-to-default actions.
 
 Each row uses `title → metadata → notes`. Status, score, progress, and notes are direct row controls. Notes preview up to five lines, row background expands/collapses the preview, and changed notes save on blur. There is no separate row edit dialog. Selection is always reconciled to the currently visible IDs before bulk removal. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
 
@@ -46,7 +46,7 @@ Each row uses `title → metadata → notes`. Status, score, progress, and notes
 1. Manual Add: category → one canonical provider → exact choice (TV: show → season) → immediate local save → durable enrichment.
 2. Quick Import: one title or supported provider URL per line → bounded provider discovery → review → save.
 3. Canonical CSV: strict provider-ID round trip preserving status/score/progress/notes, with synchronous revalidation.
-4. Markdown export: human-readable grouped snapshot; it is not an import contract.
+4. Markdown export: human-readable snapshot with one table per media type and status-ordered rows inside each table; it is not an import contract.
 5. Account creation: admin-generated one-time registration invite.
 6. Passwordless login: admin assigns a unique email to an existing account → public request returns a generic response → configured transactional-mail adapter sends a short-lived link → GET renders confirmation without consuming → explicit POST consumes and creates the normal session.
 7. Password recovery: admin-generated one-time reset URL for an existing user; a locked-out operator can use `npm run admin:create-password-reset -- <username>` or the direct emergency `admin:set-password` command from the trusted runtime environment.

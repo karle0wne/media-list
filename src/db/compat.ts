@@ -36,9 +36,12 @@ export function applySchemaCompatibility(db: DatabaseSync) {
   if (!hasTable(db, "media") || !hasTable(db, "user_media")) return;
   addColumnIfMissing(db, "media", "romanized_title", "TEXT");
   addColumnIfMissing(db, "media", "external_url", "TEXT");
+  addColumnIfMissing(db, "user_media", "updated_at", "INTEGER NOT NULL DEFAULT 0");
+  if (hasColumn(db, "user_media", "created_at"))
+    db.prepare("UPDATE user_media SET updated_at = created_at WHERE updated_at = 0").run();
   for (const column of ["runtime_minutes", "country_code", "episode_count", "page_count", "metadata_json", "created_at"])
     dropColumnIfPresent(db, "media", column);
-  for (const column of ["time_spent_override_minutes", "updated_at"]) dropColumnIfPresent(db, "user_media", column);
+  dropColumnIfPresent(db, "user_media", "time_spent_override_minutes");
   if (hasColumn(db, "user_media", "status") && hasColumn(db, "user_media", "progress_current") && hasColumn(db, "user_media", "progress_total")) {
     const result = db
       .prepare("UPDATE user_media SET progress_current = progress_total WHERE status = 'COMPLETED' AND progress_total IS NOT NULL AND progress_current != progress_total")

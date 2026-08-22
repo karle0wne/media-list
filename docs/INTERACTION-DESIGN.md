@@ -17,7 +17,7 @@ Status, score, progress, and notes are edited directly in the row. There is no s
 
 Links, selects, inputs, buttons, labels, and checkboxes retain their own actions and never trigger row expansion. Notes remain keyboard-focusable rather than turning a table row into a pseudo-button.
 
-The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date added` first. Search is always visible. Settings owns media-type/score/note filters, sort direction, and optional columns. `Clear filters` clears filters only; presentation state is preserved. Media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
+The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date updated` first, where the timestamp tracks user-owned list mutations rather than background provider enrichment. Search is always visible. Settings owns media-type/score/note filters, sort direction, and optional columns. `Date added` and `Date updated` are independent optional columns; media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
 
 Bulk selection is scoped to the IDs currently visible after status/search/filter/sort navigation. Hidden or stale IDs are never included in the count, confirmation, or delete request. Batch removal still requires explicit confirmation and is server-scoped to the authenticated user.
 
@@ -29,7 +29,7 @@ Results reserve a stable thumbnail slot even when no cover exists. They show com
 
 ## Secondary workflows
 
-Quick Import, canonical CSV, Markdown export, administration, help, and provider credits remain secondary workflows. Registration is invite-only. Password recovery is a separate one-time-token flow bound to an existing account; it does not reuse registration invites and does not require email infrastructure. Provider attribution remains in a compact, named Credits dialog.
+Quick Import, canonical CSV, Markdown export, administration, help, and provider credits remain secondary workflows. Markdown export is a human-readable snapshot split into one table per media type, with rows ordered by list status inside each table. Registration is invite-only. Password recovery is a separate one-time-token flow bound to an existing account; it does not reuse registration invites and does not require email infrastructure. Provider attribution remains in a compact, named Credits dialog.
 
 ## Provider behavior
 
