@@ -37,9 +37,13 @@
 
 ## Library interaction
 
-Status tabs are primary navigation. Search stays visible; media-type/score/note filters, sorting, direction, and optional columns live in Settings. Default sorting is newest `Date updated` first; this timestamp changes with user-owned list edits, while `Date added` remains available as a separate optional column and sort key. Media types and visible columns have independent reset-to-default actions.
+The library opens directly on its working controls and content; it does not reserve a hero block for a title/count summary. `+ Add media` is kept visually prominent at the left, status tabs are centered, and `Filter`, `Sort`, Table/Grid, and display settings are grouped at the right on desktop. Responsive layouts may wrap this into two rows while keeping the status tabs together on one horizontally scrollable line.
 
-Each row uses `title → metadata → notes`. Status, score, progress, and notes are direct row controls. Notes preview up to five lines, row background expands/collapses the preview, and changed notes save on blur. There is no separate row edit dialog. Selection is always reconciled to the currently visible IDs before bulk removal. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
+Status tabs are primary navigation and reuse the existing status palette as low-emphasis underlines. Search stays visible. Filter owns media-type/score/note constraints, Sort owns ordering/direction, and display settings own optional table columns. Default sorting is newest `Date updated` first; this timestamp changes with user-owned list edits, while `Date added` remains available as a separate optional column and sort key. Media types and visible columns have independent reset-to-default actions.
+
+Table view remains the direct-editing surface. Each row uses `title → metadata → notes`. Status, score, progress, and notes are direct row controls. Notes preview up to five lines, row background expands/collapses the preview, and changed notes save on blur. There is no separate row edit dialog. Selection is always reconciled to the currently visible IDs before bulk removal.
+
+Grid view is an alternate poster-first presentation over the exact same filtered and sorted dataset. It does not introduce a media detail page, Kanban, or a second state model. Cards show cover, title, type/year, status, score, progress where applicable, and `Date updated`; cover/title point to the canonical external media page. Normal desktop uses four columns, large desktop five, narrower layouts three, and phones two. The desktop grid width is bounded so cards remain stable and readable. The user's Table/Grid choice is persisted in browser-local storage and survives reload/navigation in that browser without requiring account/auth changes. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
 
 ## Entry, export, and account paths
 

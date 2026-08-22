@@ -4,7 +4,11 @@
 
 ## Library structure
 
-Status tabs are first-level navigation. Rows are the primary objects:
+The library starts with the working controls rather than a decorative page hero. `+ Add media` sits at the left, status navigation is visually centered, and compact `Filter`, `Sort`, view-mode, and display-settings controls sit at the right. Search remains visible immediately below that command row.
+
+Status tabs are first-level navigation. Their status-specific colors are deliberately subtle and reuse the same status palette as rows/cards so the visual grouping is reinforced without turning the tabs into high-emphasis buttons.
+
+Table view remains the dense editing surface. Rows are the primary editable objects:
 
 ```text
 cover + title
@@ -17,7 +21,9 @@ Status, score, progress, and notes are edited directly in the row. There is no s
 
 Links, selects, inputs, buttons, labels, and checkboxes retain their own actions and never trigger row expansion. Notes remain keyboard-focusable rather than turning a table row into a pseudo-button.
 
-The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date updated` first, where the timestamp tracks user-owned list mutations rather than background provider enrichment. Search is always visible. Settings owns media-type/score/note filters, sort direction, and optional columns. `Date added` and `Date updated` are independent optional columns; media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
+Grid view is an optional presentation of the same filtered/sorted list, not a second editing model. It uses poster-first cards with title, type/year, status, score, progress, and update date; cover/title links still open the canonical external media page. There is no card detail page and no Kanban mode. Grid geometry is intentionally predictable: large desktop uses five columns, normal desktop four, narrower layouts three, and phones two. The grid uses a bounded desktop width so covers stay readable instead of stretching across very wide displays. The chosen Table/Grid mode is persisted in browser-local preferences and survives reload/navigation on that browser without involving authentication state.
+
+The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date updated` first, where the timestamp tracks user-owned list mutations rather than background provider enrichment. Filter owns media-type/score/note constraints, Sort owns ordering/direction, and the gear owns optional table columns. `Date added` and `Date updated` are independent optional columns; media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
 
 Bulk selection is scoped to the IDs currently visible after status/search/filter/sort navigation. Hidden or stale IDs are never included in the count, confirmation, or delete request. Batch removal still requires explicit confirmation and is server-scoped to the authenticated user.
 
@@ -37,4 +43,4 @@ Provider identity remains canonical identity. Exact revalidation, TV season boun
 
 ## Visual language
 
-Keep the dense MyAnimeList-derived table and Catppuccin theme family. Prefer low chrome, semantic tables, native forms/dialogs where a secondary workflow actually needs them, compact controls, and direct manipulation over nested cards or dashboard surfaces.
+Keep the dense MyAnimeList-derived table as the primary editing view and the Catppuccin theme family. The optional poster grid is a viewing alternative over the same list, not a dashboard/card rewrite of the product. Prefer low chrome, native forms/dialogs for secondary workflows, compact controls, direct manipulation in table mode, and predictable responsive geometry.
