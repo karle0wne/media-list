@@ -18,4 +18,4 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 EXPOSE 3000
-CMD ["npm", "start", "--", "-H", "0.0.0.0", "-p", "3000"]
+CMD ["sh", "-c", "npm run db:migrate && exec npm start -- -H 0.0.0.0 -p 3000"]
