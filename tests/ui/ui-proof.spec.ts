@@ -11,16 +11,11 @@ async function prepare(page: Page) {
   await mkdir(output, { recursive: true });
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  page.on("console", message => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
+  page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
   page.on("pageerror", error => pageErrors.push(error.message));
-  await page.route(
-    /^https:\/\/(s4\.anilist\.co|covers\.openlibrary\.org|image\.tmdb\.org|media\.rawg\.io)\//,
-    async route => {
-      await route.fulfill({ status: 200, contentType: "image/png", body: fakePng });
-    },
-  );
+  await page.route(/^https:\/\/(s4\.anilist\.co|covers\.openlibrary\.org|image\.tmdb\.org|media\.rawg\.io)\//, async route => {
+    await route.fulfill({ status: 200, contentType: "image/png", body: fakePng });
+  });
   return { consoleErrors, pageErrors };
 }
 
@@ -39,7 +34,6 @@ async function proveRetiredAuthRoutes(page: Page) {
 test("desktop library remains stable behind trusted gateway identity", async ({ page }) => {
   const diagnostics = await prepare(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
-
   await proveRetiredAuthRoutes(page);
   await page.goto("/");
   await expect(page).toHaveURL("/");
@@ -63,19 +57,16 @@ test("desktop library remains stable behind trusted gateway identity", async ({ 
   const filterDialog = page.getByRole("dialog", { name: "Filter list" });
   await expect(filterDialog).toBeVisible();
   await filterDialog.getByRole("button", { name: "Close" }).click();
-
   await page.getByRole("button", { name: "Sort" }).click();
   const sortDialog = page.getByRole("dialog", { name: "Sort list" });
   await expect(sortDialog.getByLabel("Sort by")).toHaveValue("updated");
   await expect(sortDialog.getByLabel("Direction")).toHaveValue("desc");
   await sortDialog.getByRole("button", { name: "Close" }).click();
-
   await page.getByRole("button", { name: "Grid view" }).click();
   const grid = page.locator(".libraryGrid");
   await expect(grid).toBeVisible();
   expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(4);
   await capture(page, "library-grid-desktop");
-
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
   await writeFile(`${output}/desktop-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
@@ -84,19 +75,18 @@ test("desktop library remains stable behind trusted gateway identity", async ({ 
 test("mobile library stays inside viewport behind trusted gateway identity", async ({ page }) => {
   const diagnostics = await prepare(page);
   await page.setViewportSize({ width: 390, height: 844 });
-
   await page.goto("/");
-  await expect(page.getByText("admin_ui", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("link", { name: "+ Add media" })).toBeVisible();
+  await expect(page.locator(".libraryTableWrap")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await capture(page, "library-table-mobile");
-
   await page.getByRole("button", { name: "Grid view" }).click();
   const grid = page.locator(".libraryGrid");
   await expect(grid).toBeVisible();
   expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await capture(page, "library-grid-mobile");
-
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
   await writeFile(`${output}/mobile-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
