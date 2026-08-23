@@ -1,13 +1,13 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../src/db";
-import { sessions, users } from "../src/db/schema";
-import { hashToken, randomToken } from "../src/lib/crypto";
+import { users } from "../src/db/schema";
 import { addMediaToUser } from "../src/lib/services/media";
 import type { MediaCandidate } from "../src/lib/types";
 
-export const UI_PROOF_SESSION_TOKEN = "ui-proof-session-token";
-const ADMIN_USERNAME = "admin_ui";
+const USERNAME = "admin_ui";
+const EMAIL = "admin-ui@example.com";
+const SUBJECT = "central-auth:media-list:admin_ui";
 const longNotes = [
   "First line of a deliberately long note used by the UI proof.",
   "Second line keeps the preview representative.",
@@ -29,22 +29,10 @@ const candidates: Array<{ candidate: MediaCandidate; state: Parameters<typeof ad
 async function main() {
   const { db, sqlite } = getDatabase();
   try {
-    const adminId = randomUUID();
-    const readerId = randomUUID();
-    const unreachablePasswordHash = `oidc-only:${randomToken(32)}`;
-    const createdAt = new Date();
-    await db.insert(users).values([
-      { id: adminId, username: ADMIN_USERNAME, email: "admin-ui@example.com", externalSubject: "https://central-auth.example.test|admin-ui", passwordHash: unreachablePasswordHash, role: "ADMIN", active: true, createdAt },
-      { id: readerId, username: "reader_ui", email: "reader-ui@example.com", externalSubject: "https://central-auth.example.test|reader-ui", passwordHash: unreachablePasswordHash, role: "USER", active: true, createdAt },
-    ]);
-    await db.insert(sessions).values({
-      tokenHash: hashToken(UI_PROOF_SESSION_TOKEN),
-      userId: adminId,
-      createdAt,
-      expiresAt: new Date(createdAt.getTime() + 86_400_000),
-    });
-    for (const { candidate, state } of candidates) await addMediaToUser(db, adminId, candidate, state);
-    console.log(`UI fixture ready: ${ADMIN_USERNAME}`);
+    const userId = randomUUID();
+    await db.insert(users).values({ id: userId, username: USERNAME, email: EMAIL, externalSubject: SUBJECT, createdAt: new Date() });
+    for (const { candidate, state } of candidates) await addMediaToUser(db, userId, candidate, state);
+    console.log(`UI fixture ready: ${USERNAME}`);
   } finally {
     sqlite.close();
   }
