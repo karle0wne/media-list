@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: '24.15.0'
           cache: npm
+          cache-dependency-path: package.json
       - run: npm install
       - name: Generate migration from exact schema
         run: npm run db:generate -- --name trusted_identity_boundary
