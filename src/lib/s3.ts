@@ -1,16 +1,29 @@
 import { S3Client } from "@aws-sdk/client-s3";
-
-const REQUIRED = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const;
+import {
+  loadRuntimeConfig,
+  s3BucketSetting,
+  s3EndpointSetting,
+  s3PrefixSetting,
+  s3RegionSetting,
+} from "@/config/runtime";
 
 export function loadS3Config() {
-  for (const name of REQUIRED) if (!process.env[name]?.trim()) throw new Error(`${name} is required`);
+  const runtime = loadRuntimeConfig();
+  const endpoint = s3EndpointSetting(runtime);
+  const bucket = s3BucketSetting(runtime);
+  const accessKeyId = process.env.S3_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY?.trim();
+  if (!endpoint) throw new Error("S3_ENDPOINT is required");
+  if (!bucket) throw new Error("S3_BUCKET is required");
+  if (!accessKeyId) throw new Error("S3_ACCESS_KEY_ID is required");
+  if (!secretAccessKey) throw new Error("S3_SECRET_ACCESS_KEY is required");
   return {
-    endpoint: process.env.S3_ENDPOINT!.trim(),
-    bucket: process.env.S3_BUCKET!.trim(),
-    region: process.env.S3_REGION?.trim() || "auto",
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!.trim(),
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!.trim(),
-    prefix: normalizeS3Prefix(process.env.S3_PREFIX ?? "media-list/"),
+    endpoint,
+    bucket,
+    region: s3RegionSetting(runtime),
+    accessKeyId,
+    secretAccessKey,
+    prefix: normalizeS3Prefix(s3PrefixSetting(runtime)),
   };
 }
 
