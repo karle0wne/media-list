@@ -64,7 +64,9 @@ test("legacy database is baselined and cleaned without losing user state", () =>
     const migrated = new DatabaseSync(path);
     try {
       const user = migrated.prepare("SELECT id, username FROM users WHERE id=?").get("legacy-user") as { id: string; username: string } | undefined;
-      assert.deepEqual(user, { id: "legacy-user", username: "legacy_user" });
+      assert.ok(user);
+      assert.equal(user.id, "legacy-user");
+      assert.equal(user.username, "legacy_user");
       const history = migrated.prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at").all() as Array<{ created_at: number }>;
       assert.ok(history.length >= 3);
       assert.equal(Number(history[0].created_at), 1786890906000);
