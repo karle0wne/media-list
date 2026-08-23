@@ -1,14 +1,14 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { cookieSecure } from "@/lib/env";
-import { buildOidcAuthorizationUrl, createOidcRequest, oidcConfigured } from "@/lib/oidc";
+import { appUrl, buildOidcAuthorizationUrl, createOidcRequest, oidcConfigured } from "@/lib/oidc";
 
 const COOKIE_PATH = "/login/oidc";
 const STATE_COOKIE = "media_list_oidc_state";
 const VERIFIER_COOKIE = "media_list_oidc_verifier";
 
-export async function GET(request: Request) {
-  if (!oidcConfigured()) return NextResponse.redirect(new URL("/login?error=Central%20sign-in%20is%20not%20configured", request.url));
+export async function GET() {
+  if (!oidcConfigured()) return NextResponse.json({ error: "Central sign-in is not configured" }, { status: 503 });
   try {
     const { state, verifier, challenge } = createOidcRequest();
     const jar = await cookies();
@@ -18,6 +18,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(await buildOidcAuthorizationUrl(state, challenge));
   } catch (error) {
     console.error("OIDC authorization failed", error);
-    return NextResponse.redirect(new URL("/login?error=Central%20sign-in%20is%20temporarily%20unavailable", request.url));
+    return NextResponse.redirect(appUrl("/login?error=Central%20sign-in%20is%20temporarily%20unavailable"));
   }
 }
