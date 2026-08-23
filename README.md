@@ -4,7 +4,7 @@
 
 Provider identity is canonical identity: `external_source + external_id + external_sub_id`. Shared provider metadata is stored once; status, score, medium-specific progress, and notes remain private per local data owner. External provider failures never invalidate the saved list.
 
-See [docs/SPEC.md](docs/SPEC.md) for product invariants and [docs/INTERACTION-DESIGN.md](docs/INTERACTION-DESIGN.md) for the durable UI structure.
+The repository intentionally keeps only durable product/runtime contracts in this README. Code, tests and database migrations are authoritative for implementation details; do not maintain current-state snapshots, handoff/context files or separate design documents that must be kept synchronized with the implementation.
 
 ## Authentication boundary
 
@@ -19,6 +19,18 @@ Production exposes the application only through the trusted central-auth/reverse
 The application maps that trusted identity to a local `users` row used only as a data owner. Existing rows can be linked by verified email when an external subject is first seen. Business data remains scoped by the resolved local owner.
 
 Running the application directly on a public port while accepting arbitrary `X-Auth-*` headers is outside the production security contract.
+
+## Durable product invariants
+
+- The saved list and local user-owned state are the product; provider metadata is auxiliary.
+- Canonical media identity comes from provider IDs, never fuzzy title similarity.
+- Shared media metadata and per-user state stay separate.
+- TV seasons are separate positions identified by TMDB series id plus `season:N`.
+- Table and Grid are two presentations of the same filtered/sorted dataset; there is no second state model, detail-page requirement or Kanban model.
+- Existing user/media relationships must survive schema/auth migrations.
+- Provider failures degrade discovery/enrichment, not access to already saved state.
+- Production data, SQLite files, backups, exports and credentials never belong in Git.
+- The application must remain viable on one small VPS without Redis, PostgreSQL, external queues, self-hosted mail infrastructure or an image proxy service.
 
 ## Capabilities
 
