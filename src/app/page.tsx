@@ -1,5 +1,5 @@
 import "./library.css";
-import { requireUser } from "@/lib/auth";
+import { requireIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import {
@@ -41,7 +41,7 @@ export default async function Home({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   scheduleMediaEnrichment();
 
   const params = await searchParams;
