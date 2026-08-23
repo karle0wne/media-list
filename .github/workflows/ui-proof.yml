@@ -15,15 +15,6 @@ jobs:
     timeout-minutes: 12
     env:
       DATABASE_PATH: /tmp/media-list-ui-proof.db
-      APP_BASE_URL: http://127.0.0.1:3000
-      COOKIE_SECURE: "false"
-      MAX_USERS: "5"
-      SESSION_TTL_DAYS: "1"
-      OIDC_ISSUER: https://central-auth.example.test
-      OIDC_CLIENT_ID: ui-proof-client
-      OIDC_CLIENT_SECRET: ui-proof-secret-not-used
-      OIDC_ADMIN_ROLE: media-list-admin
-      OIDC_USER_ROLE: media-list-user
     steps:
       - uses: actions/checkout@v6
         with:
