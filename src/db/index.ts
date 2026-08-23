@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { drizzle } from "drizzle-orm/node-sqlite";
+import { databasePathSetting } from "@/config/runtime";
 
 function makeDb(sqlite: DatabaseSync) {
   return drizzle({ client: sqlite });
@@ -15,7 +16,7 @@ declare global {
 }
 
 export function databasePath() {
-  return process.env.DATABASE_PATH || "./data/media-list.db";
+  return databasePathSetting();
 }
 
 export function openDatabase(path = databasePath()): DbBundle {
