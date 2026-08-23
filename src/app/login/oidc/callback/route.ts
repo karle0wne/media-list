@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createSession } from "@/lib/auth";
-import { exchangeOidcCode } from "@/lib/oidc";
+import { appUrl, exchangeOidcCode } from "@/lib/oidc";
 import { resolveExternalUser } from "@/lib/services/external-users";
 import { getDatabase } from "@/db";
 
@@ -19,19 +19,19 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
   const code = url.searchParams.get("code");
   if (!expectedState || !verifier || !state || state !== expectedState || !code)
-    return NextResponse.redirect(new URL("/login?error=Central%20sign-in%20response%20is%20invalid%20or%20expired", request.url));
+    return NextResponse.redirect(appUrl("/login?error=Central%20sign-in%20response%20is%20invalid%20or%20expired"));
 
   try {
     const identity = await exchangeOidcCode(code, verifier);
     const userId = await resolveExternalUser(getDatabase().db, identity);
     await createSession(userId);
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(appUrl("/"));
   } catch (error) {
     console.error("OIDC callback failed", error);
     const message = error instanceof Error && error.message === "This account is not allowed to use media-list"
       ? "This account is not allowed to use media-list"
       : "Central sign-in failed";
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, request.url));
+    return NextResponse.redirect(appUrl(`/login?error=${encodeURIComponent(message)}`));
   }
 }
 
