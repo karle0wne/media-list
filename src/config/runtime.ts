@@ -7,9 +7,17 @@ type TmdbRuntimeConfig = {
   refreshLimit?: number;
 };
 
+type S3RuntimeConfig = {
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+};
+
 export type RuntimeConfig = {
   databasePath?: string;
   tmdb?: TmdbRuntimeConfig;
+  backup?: { s3?: S3RuntimeConfig };
 };
 
 function object(value: unknown, name: string): Record<string, unknown> {
@@ -41,7 +49,7 @@ function optionalPositiveInteger(value: unknown, name: string, maximum?: number)
 export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.trim() || DEFAULT_CONFIG_FILE): RuntimeConfig {
   if (!existsSync(path)) return {};
   const root = object(JSON.parse(readFileSync(path, "utf8")), "runtime config");
-  assertKnownFields(root, ["databasePath", "tmdb"], "runtime config");
+  assertKnownFields(root, ["databasePath", "tmdb", "backup"], "runtime config");
 
   let tmdb: TmdbRuntimeConfig | undefined;
   if (root.tmdb !== undefined) {
@@ -53,9 +61,30 @@ export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.tri
     };
   }
 
+  let backup: RuntimeConfig["backup"];
+  if (root.backup !== undefined) {
+    const rawBackup = object(root.backup, "runtime config.backup");
+    assertKnownFields(rawBackup, ["s3"], "runtime config.backup");
+    if (rawBackup.s3 !== undefined) {
+      const rawS3 = object(rawBackup.s3, "runtime config.backup.s3");
+      assertKnownFields(rawS3, ["endpoint", "region", "bucket", "prefix"], "runtime config.backup.s3");
+      backup = {
+        s3: {
+          endpoint: optionalString(rawS3.endpoint, "runtime config.backup.s3.endpoint"),
+          region: optionalString(rawS3.region, "runtime config.backup.s3.region"),
+          bucket: optionalString(rawS3.bucket, "runtime config.backup.s3.bucket"),
+          prefix: optionalString(rawS3.prefix, "runtime config.backup.s3.prefix"),
+        },
+      };
+    } else {
+      backup = {};
+    }
+  }
+
   return {
     databasePath: optionalString(root.databasePath, "runtime config.databasePath"),
     tmdb,
+    backup,
   };
 }
 
@@ -69,4 +98,20 @@ export function tmdbMetadataTtlDaysSetting(config = loadRuntimeConfig()) {
 
 export function tmdbRefreshLimitSetting(config = loadRuntimeConfig()) {
   return Math.max(1, Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || config.tmdb?.refreshLimit || 50)));
+}
+
+export function s3EndpointSetting(config = loadRuntimeConfig()) {
+  return process.env.S3_ENDPOINT?.trim() || config.backup?.s3?.endpoint;
+}
+
+export function s3RegionSetting(config = loadRuntimeConfig()) {
+  return process.env.S3_REGION?.trim() || config.backup?.s3?.region || "auto";
+}
+
+export function s3BucketSetting(config = loadRuntimeConfig()) {
+  return process.env.S3_BUCKET?.trim() || config.backup?.s3?.bucket;
+}
+
+export function s3PrefixSetting(config = loadRuntimeConfig()) {
+  return process.env.S3_PREFIX ?? config.backup?.s3?.prefix ?? "media-list/";
 }
