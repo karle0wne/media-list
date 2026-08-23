@@ -23,7 +23,9 @@ jobs:
           cache-dependency-path: package.json
       - run: npm install
       - name: Generate migration from exact schema
-        run: npm run db:generate -- --name trusted_identity_boundary
+        run: >-
+          npm run db:generate -- --name trusted_identity_boundary --hints
+          '[{"type":"create","kind":"column","entity":["public","media","romanized_title"]},{"type":"create","kind":"column","entity":["public","media","external_url"]},{"type":"create","kind":"column","entity":["public","users","email"]},{"type":"create","kind":"column","entity":["public","users","external_subject"]}]'
       - name: Commit generated migration to PR branch
         env:
           GH_TOKEN: ${{ github.token }}
