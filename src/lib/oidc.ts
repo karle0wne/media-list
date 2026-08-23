@@ -42,9 +42,14 @@ export function oidcRoleNames() {
   };
 }
 
+export function appUrl(pathname = "/") {
+  const base = new URL(required("APP_BASE_URL"));
+  if (base.protocol !== "http:" && base.protocol !== "https:") throw new Error("APP_BASE_URL must use http or https");
+  return new URL(pathname, base).toString();
+}
+
 export function oidcCallbackUrl() {
-  const base = required("APP_BASE_URL");
-  return new URL("/login/oidc/callback", base).toString();
+  return appUrl("/login/oidc/callback");
 }
 
 export function createOidcRequest() {
