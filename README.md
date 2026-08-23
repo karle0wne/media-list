@@ -62,7 +62,7 @@ Normal Add is category → canonical provider search → exact selection → imm
 
 ## Local development
 
-Requirements: Node.js 24.15+.
+Use the Node.js version range declared in `package.json`.
 
 ```bash
 cp .env.example .env
@@ -95,7 +95,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose applies pending migrations before starting Next.js. SQLite lives at `./data/media-list.db` by default. Production automation may set `APP_IMAGE` to an immutable registry digest and uses the same Compose contract with the application bound privately behind the reverse proxy.
+Compose applies pending migrations before starting Next.js. The Compose/environment configuration is authoritative for the current local data path and runtime image. Production uses the same Compose contract with the application bound privately behind the reverse proxy.
 
 ## Database and maintenance
 
@@ -105,8 +105,8 @@ Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run meta
 
 ## Backup and restore
 
-The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it. `npm run backup` writes one validated recovery object, `<S3_PREFIX>latest/media-list.db`; there is no application-managed PITR/history policy. `npm run restore` materializes that object. A confirmed S3/R2 `NoSuchKey` is first bootstrap; other storage failures fail closed.
+The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it. Backup/restore commands and object-key details are defined by the application code/configuration rather than duplicated here. The durable contract is a validated S3-compatible disaster-recovery object; confirmed absence of the recovery object is first bootstrap, while other storage failures fail closed.
 
 ## Runtime contract
 
-`GET /api/health` verifies database access and returns `APP_REVISION`. Production data, SQLite files, backups, exports and credentials never belong in Git.
+`GET /api/health` verifies database access and reports the deployed application revision. Production data, SQLite files, backups, exports and credentials never belong in Git.
