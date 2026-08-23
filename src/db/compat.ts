@@ -1,6 +1,22 @@
 import { DatabaseSync } from "node:sqlite";
 
 export function applySchemaCompatibility(db: DatabaseSync) {
+  if (!hasTable(db, "users")) return;
+
+  // Data-owner identity fields predate the canonical Drizzle snapshot on some
+  // installations, so keep this bridge idempotent for both fresh and live DBs.
+  addColumnIfMissing(db, "users", "email", "TEXT");
+  addColumnIfMissing(db, "users", "external_subject", "TEXT");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_uq ON users(email)");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_external_subject_uq ON users(external_subject)");
+
+  // Authentication is owned by central-auth. Drop application auth state before
+  // removing the legacy user auth columns so foreign keys cannot retain it.
+  for (const table of ["sessions", "magic_login_tokens", "invites", "password_reset_tokens"])
+    db.exec(`DROP TABLE IF EXISTS ${table}`);
+  for (const column of ["password_hash", "role", "active"])
+    dropColumnIfPresent(db, "users", column);
+
   if (!hasTable(db, "media") || !hasTable(db, "user_media")) return;
   addColumnIfMissing(db, "media", "romanized_title", "TEXT");
   addColumnIfMissing(db, "media", "external_url", "TEXT");
