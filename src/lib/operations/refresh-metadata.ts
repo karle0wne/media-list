@@ -1,13 +1,14 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { openDatabase } from "../../db";
 import { media } from "../../db/schema";
+import { tmdbMetadataTtlDaysSetting, tmdbRefreshLimitSetting } from "../../config/runtime";
 import { resolveExact } from "../providers";
 import { refreshMediaMetadata } from "../services/media";
 
 export async function refreshTmdbMetadata(now = new Date()) {
   if (!process.env.TMDB_API_TOKEN?.trim()) return { refreshed: 0, failed: 0, skipped: true };
-  const staleDays = Math.max(1, Number(process.env.TMDB_METADATA_TTL_DAYS || 30));
-  const limit = Math.max(1, Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || 50)));
+  const staleDays = tmdbMetadataTtlDaysSetting();
+  const limit = tmdbRefreshLimitSetting();
   const cutoff = new Date(now.getTime() - staleDays * 86_400_000);
   const { db, sqlite } = openDatabase();
   try {
