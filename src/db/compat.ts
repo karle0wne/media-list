@@ -3,35 +3,19 @@ import { DatabaseSync } from "node:sqlite";
 export function applySchemaCompatibility(db: DatabaseSync) {
   if (!hasTable(db, "users")) return;
 
+  // Data-owner identity fields predate the canonical Drizzle snapshot on some
+  // installations, so keep this bridge idempotent for both fresh and live DBs.
   addColumnIfMissing(db, "users", "email", "TEXT");
   addColumnIfMissing(db, "users", "external_subject", "TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_uq ON users(email)");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_external_subject_uq ON users(external_subject)");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS magic_login_tokens (
-      id TEXT PRIMARY KEY NOT NULL,
-      token_hash TEXT NOT NULL,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL,
-      used_at INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS magic_login_token_uq ON magic_login_tokens(token_hash);
-    CREATE INDEX IF NOT EXISTS magic_login_user_idx ON magic_login_tokens(user_id);
-    CREATE INDEX IF NOT EXISTS magic_login_expiry_idx ON magic_login_tokens(expires_at);
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id TEXT PRIMARY KEY NOT NULL,
-      token_hash TEXT NOT NULL,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
-      expires_at INTEGER NOT NULL,
-      used_at INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS password_reset_token_uq ON password_reset_tokens(token_hash);
-    CREATE INDEX IF NOT EXISTS password_reset_user_idx ON password_reset_tokens(user_id);
-    CREATE INDEX IF NOT EXISTS password_reset_expiry_idx ON password_reset_tokens(expires_at);
-  `);
+
+  // Authentication is owned by central-auth. Drop application auth state before
+  // removing the legacy user auth columns so foreign keys cannot retain it.
+  for (const table of ["sessions", "magic_login_tokens", "invites", "password_reset_tokens"])
+    db.exec(`DROP TABLE IF EXISTS ${table}`);
+  for (const column of ["password_hash", "role", "active"])
+    dropColumnIfPresent(db, "users", column);
 
   if (!hasTable(db, "media") || !hasTable(db, "user_media")) return;
   addColumnIfMissing(db, "media", "romanized_title", "TEXT");

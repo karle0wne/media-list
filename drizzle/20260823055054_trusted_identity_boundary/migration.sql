@@ -1,0 +1,11 @@
+-- Canonical Drizzle checkpoint for the trusted-identity boundary.
+--
+-- Existing production databases have already received part of this schema through
+-- applySchemaCompatibility(), while fresh databases start from the historical
+-- migration chain. Executing Drizzle's generated ADD/DROP statements directly
+-- would therefore fail on one of those two valid starting states.
+--
+-- scripts/migrate.ts records this checkpoint in Drizzle history and then runs the
+-- idempotent compatibility reconciler, which adds missing data-owner identity
+-- columns and removes legacy application-auth state without losing media data.
+SELECT 1;

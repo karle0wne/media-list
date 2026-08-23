@@ -4,36 +4,38 @@ import { existsSync, readFileSync } from "node:fs";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("interactive authentication surface is OIDC-only", () => {
-  assert.equal(existsSync("src/app/login/magic/page.tsx"), false);
-  assert.equal(existsSync("src/app/register/page.tsx"), false);
-  assert.equal(existsSync("src/app/reset-password/page.tsx"), false);
+test("media-list no longer owns an authentication surface", () => {
+  for (const path of [
+    "src/app/login/page.tsx",
+    "src/app/login/oidc/route.ts",
+    "src/app/login/oidc/callback/route.ts",
+    "src/app/login/magic/page.tsx",
+    "src/app/register/page.tsx",
+    "src/app/reset-password/page.tsx",
+    "src/app/admin/page.tsx",
+    "src/lib/auth.ts",
+    "src/lib/oidc.ts",
+    "src/lib/crypto.ts",
+    "src/lib/mail.ts",
+    "src/lib/services/users.ts",
+    "src/lib/services/external-users.ts",
+  ]) assert.equal(existsSync(path), false, `${path} must stay removed`);
 
-  const login = read("src/app/login/page.tsx");
-  assert.match(login, /Continue with Google/);
-  assert.match(login, /href="\/login\/oidc"/);
-  assert.doesNotMatch(login, /password|magic|email me|fallback/i);
+  const pkg = read("package.json");
+  assert.doesNotMatch(pkg, /admin:create|admin:set-password|admin:create-password-reset/);
 
-  const actions = read("src/app/actions.ts");
-  for (const name of [
-    "loginAction",
-    "requestMagicLinkAction",
-    "consumeMagicLoginAction",
-    "registerAction",
-    "createInviteAction",
-    "createPasswordResetAction",
-    "resetPasswordAction",
-  ]) assert.doesNotMatch(actions, new RegExp(`\\b${name}\\b`));
-
-  const admin = read("src/app/admin/page.tsx");
-  assert.match(admin, /managed centrally/i);
-  assert.doesNotMatch(admin, /invite|reset password|email allowlist|disable user|enable user/i);
+  const example = read(".env.example");
+  assert.doesNotMatch(example, /OIDC_|SESSION_|COOKIE_SECURE|MAX_USERS|BREVO_|MAGIC_LINK/);
 });
 
-test("production auth configuration no longer advertises email or password auth", () => {
-  const example = read(".env.example");
-  assert.match(example, /OIDC_ISSUER=/);
-  assert.match(example, /OIDC_CLIENT_ID=/);
-  assert.match(example, /OIDC_CLIENT_SECRET=/);
-  assert.doesNotMatch(example, /BREVO_API_KEY|MAGIC_LINK_FROM/);
+test("all request identity comes from the trusted gateway contract", () => {
+  const identity = read("src/lib/identity.ts");
+  assert.match(identity, /x-auth-subject/);
+  assert.match(identity, /x-auth-email/);
+  assert.match(identity, /x-auth-name/);
+  assert.match(identity, /resolveTrustedIdentity/);
+
+  const layout = read("src/app/layout.tsx");
+  assert.match(layout, /requireIdentity/);
+  assert.doesNotMatch(layout, /Users|\/admin|logoutAction/);
 });

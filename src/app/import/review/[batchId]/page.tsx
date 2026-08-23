@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import { ProviderCover } from "@/components/provider-cover";
-import { requireUser } from "@/lib/auth";
+import { requireIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { getBatch } from "@/lib/services/imports";
 import { confirmImportAction } from "../../../actions";
 
 export default async function ReviewPage({ params }: { params: Promise<{ batchId: string }> }) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   const { batchId } = await params;
   const data = await getBatch(getDatabase().db, user.id, batchId);
   if (!data) notFound();
