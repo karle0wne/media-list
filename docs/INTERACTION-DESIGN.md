@@ -2,6 +2,8 @@
 
 `media-list` should feel like editing a small personal list, not operating a dashboard. SQLite list state is the product; provider metadata is auxiliary, and normal list interaction remains useful when providers are unavailable.
 
+Authentication is not an application UI concern. Production identity is established before the request reaches `media-list`; the application UI starts directly at the resolved owner's library and exposes no login, Users/admin, registration, password, recovery, or IAM-role screens.
+
 ## Library structure
 
 The library starts with the working controls rather than a decorative page hero. `+ Add media` sits at the left, status navigation is visually centered, and compact `Filter`, `Sort`, view-mode, and display-settings controls sit at the right. Search remains visible immediately below that command row.
@@ -25,7 +27,7 @@ Grid view is an optional presentation of the same filtered/sorted list, not a se
 
 The header belongs to the table and scrolls naturally with it. Default ordering is newest `Date updated` first, where the timestamp tracks user-owned list mutations rather than background provider enrichment. Filter owns media-type/score/note constraints, Sort owns ordering/direction, and the gear owns optional table columns. `Date added` and `Date updated` are independent optional columns; media types and visible columns each expose their own explicit reset-to-default action. An intentionally empty optional-column set is valid.
 
-Bulk selection is scoped to the IDs currently visible after status/search/filter/sort navigation. Hidden or stale IDs are never included in the count, confirmation, or delete request. Batch removal still requires explicit confirmation and is server-scoped to the authenticated user.
+Bulk selection is scoped to the IDs currently visible after status/search/filter/sort navigation. Hidden or stale IDs are never included in the count, confirmation, or delete request. Batch removal still requires explicit confirmation and is server-scoped to the resolved local data owner.
 
 ## Add flow
 
@@ -35,7 +37,7 @@ Results reserve a stable thumbnail slot even when no cover exists. They show com
 
 ## Secondary workflows
 
-Quick Import, canonical CSV, Markdown export, administration, help, and provider credits remain secondary workflows. Markdown export is a human-readable snapshot split into one table per media type, with rows ordered by list status inside each table. Registration is invite-only. Password recovery is a separate one-time-token flow bound to an existing account; it does not reuse registration invites and does not require email infrastructure. Provider attribution remains in a compact, named Credits dialog.
+Quick Import, canonical CSV, Markdown export, help, and provider credits remain secondary workflows. Markdown export is a human-readable snapshot split into one table per media type, with rows ordered by list status inside each table. Provider attribution remains in a compact, named Credits dialog.
 
 ## Provider behavior
 
