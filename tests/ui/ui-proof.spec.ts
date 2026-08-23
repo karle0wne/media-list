@@ -47,13 +47,13 @@ async function proveGoogleOnlyLogin(page: Page) {
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
   await expect(page.locator('form input[type="email"]')).toHaveCount(0);
 
-  for (const path of ["/login/magic?token=obsolete", "/register?token=obsolete", "/reset-password?token=obsolete"]) {
+  for (const path of ["/login/magic?token=obsolete", "/register?token=obsolete", "/reset-password?token=obsolete", "/admin"]) {
     const response = await page.request.get(path, { maxRedirects: 0 });
-    expect(response.status(), `${path} must not remain an auth route`).toBe(404);
+    expect(response.status(), `${path} must not remain an application surface`).toBe(404);
   }
 }
 
-test("desktop Google-only login, library views and IAM-owned users are stable", async ({ page }) => {
+test("desktop Google-only login and library views are stable", async ({ page }) => {
   const diagnostics = await prepare(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -62,6 +62,7 @@ test("desktop Google-only login, library views and IAM-owned users are stable", 
 
   await useFixtureSession(page);
   await expect(page.getByRole("link", { name: "+ Add media" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
   await expect(page.locator(".libraryTableWrap")).toBeVisible();
   await capture(page, "library-table-desktop");
 
@@ -93,15 +94,6 @@ test("desktop Google-only login, library views and IAM-owned users are stable", 
   expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(4);
   await capture(page, "library-grid-desktop");
 
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
-  await expect(page.getByText(/managed centrally/i)).toBeVisible();
-  const reader = page.locator("tr", { hasText: "reader_ui" });
-  await expect(reader).toContainText("reader-ui@example.com");
-  await expect(reader).toContainText("USER");
-  await expect(page.getByRole("button", { name: /add user|reset password|disable user|enable user|save/i })).toHaveCount(0);
-  await capture(page, "users-desktop");
-
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
   await writeFile(`${output}/desktop-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
@@ -116,6 +108,7 @@ test("mobile keeps Google-only login and current library inside viewport", async
   await capture(page, "login-mobile");
 
   await useFixtureSession(page);
+  await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await capture(page, "library-table-mobile");
 
@@ -125,11 +118,6 @@ test("mobile keeps Google-only login and current library inside viewport", async
   expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await capture(page, "library-grid-mobile");
-
-  await page.goto("/admin");
-  await expect(page.getByText(/managed centrally/i)).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
-  await capture(page, "users-mobile");
 
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
