@@ -59,24 +59,14 @@ export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.tri
   };
 }
 
-function positiveIntegerFromEnv(name: string) {
-  const raw = process.env[name]?.trim();
-  if (!raw) return undefined;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
-  return value;
-}
-
 export function databasePathSetting(config = loadRuntimeConfig()) {
-  return process.env.DATABASE_PATH?.trim() || config.databasePath || "./data/media-list.db";
+  return process.env.DATABASE_PATH || config.databasePath || "./data/media-list.db";
 }
 
 export function tmdbMetadataTtlDaysSetting(config = loadRuntimeConfig()) {
-  return positiveIntegerFromEnv("TMDB_METADATA_TTL_DAYS") ?? config.tmdb?.metadataTtlDays ?? 30;
+  return Math.max(1, Number(process.env.TMDB_METADATA_TTL_DAYS || config.tmdb?.metadataTtlDays || 30));
 }
 
 export function tmdbRefreshLimitSetting(config = loadRuntimeConfig()) {
-  const value = positiveIntegerFromEnv("TMDB_REFRESH_LIMIT") ?? config.tmdb?.refreshLimit ?? 50;
-  if (value > 500) throw new Error("TMDB_REFRESH_LIMIT must be <= 500");
-  return value;
+  return Math.max(1, Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || config.tmdb?.refreshLimit || 50)));
 }
