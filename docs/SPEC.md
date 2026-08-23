@@ -1,18 +1,17 @@
 # media-list specification
 
-`media-list` is a small invite-only, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally closer to an interactive personal list than a content platform: one low-resource VPS, SQLite, a few known users, and no heavy data pipeline.
+`media-list` is a small private, self-hosted tracker for anime/donghua, movies, TV seasons, books, and games. It is intentionally closer to an interactive personal list than a content platform: one low-resource VPS, SQLite, a few known data owners, and no heavy data pipeline.
 
 ## Invariants
 
 - The saved list is the product. External metadata is auxiliary: provider outage, timeout, or rate limit must not make existing list state unusable.
 - Media identity is `external_source + external_id + external_sub_id`, not title similarity.
-- Shared canonical media metadata and per-user state are separate; one user cannot read or mutate another user's state.
+- Shared canonical media metadata and per-user state are separate; one local data owner cannot read or mutate another owner's state.
+- Authentication and service access are external to the application. Production requests arrive only through a trusted gateway/reverse proxy that injects `X-Auth-Subject`, `X-Auth-Email`, and `X-Auth-Name` after access validation.
+- `users` is a local data-ownership table, not an IAM database. The trusted external subject is the stable identity link; verified email may link an existing legacy data-owner row on first contact.
+- Client-supplied `X-Auth-*` headers must never be trusted at a public boundary. The reverse proxy strips them before copying gateway-produced identity headers.
+- The application has no login, password, OIDC-client, session, invite, recovery, role-management, or access-allowlist surface.
 - TV seasons are separate positions identified by TMDB series id plus `season:N`.
-- Registration is invite-only and guarded by `MAX_USERS`.
-- A nullable unique email on an active existing user is the passwordless-login allowlist. Magic-login tokens are hashed at rest, short-lived, one-time, and revoked when the user is disabled or its email identity changes. Requests for unknown emails are indistinguishable from allowed requests at the public response surface.
-- GETting a magic-login URL never consumes its credential. Consumption happens only after an explicit POST from the landing page, so automated mail-link scanners cannot consume the login credential.
-- Passwordless email delivery is optional and uses a bounded external transactional-mail adapter; the application does not require a self-hosted SMTP/mail service. If delivery configuration is absent, the passwordless UI is disabled while password login/recovery remains operational.
-- Password reset is a distinct one-time token bound to an existing active user. Tokens are hashed at rest, expire, are consumed on success, and successful reset revokes prior sessions. Registration invites are never password-reset credentials.
 - User state is status, score, medium-specific progress, and notes. Watch/play/reading time is not a shared domain field.
 - `COMPLETED` equals the known progress total whenever a total exists, including totals learned later by metadata enrichment.
 - Canonical CSV is deterministic and provider IDs are revalidated on import.
@@ -23,7 +22,7 @@
 - Cover URLs are metadata; image bytes are not application state or backup data. Provider URLs are normalized to bounded thumbnails when the provider exposes such a transform.
 - Persisted media metadata is deliberately narrow: canonical identity, displayed title/year/link/cover variants, and enrichment state. Provider-only discovery fields remain transient unless the saved list needs them.
 - The application remains viable on one small VPS. Redis, PostgreSQL, external queues, caches, self-hosted mail servers, and microservices are not required.
-- Production data, SQLite files, backups, exports, credentials, reset tokens, invite tokens, and magic-login tokens never belong in Git.
+- Production data, SQLite files, backups, exports and credentials never belong in Git.
 
 ## Providers
 
@@ -43,16 +42,19 @@ Status tabs are primary navigation and reuse the existing status palette as low-
 
 Table view remains the direct-editing surface. Each row uses `title → metadata → notes`. Status, score, progress, and notes are direct row controls. Notes preview up to five lines, row background expands/collapses the preview, and changed notes save on blur. There is no separate row edit dialog. Selection is always reconciled to the currently visible IDs before bulk removal.
 
-Grid view is an alternate poster-first presentation over the exact same filtered and sorted dataset. It does not introduce a media detail page, Kanban, or a second state model. Cards show cover, title, type/year, status, score, progress where applicable, and `Date updated`; cover/title point to the canonical external media page. Normal desktop uses four columns, large desktop five, narrower layouts three, and phones two. The desktop grid width is bounded so cards remain stable and readable. The user's Table/Grid choice is persisted in browser-local storage and survives reload/navigation in that browser without requiring account/auth changes. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
+Grid view is an alternate poster-first presentation over the exact same filtered and sorted dataset. It does not introduce a media detail page, Kanban, or a second state model. Cards show cover, title, type/year, status, score, progress where applicable, and `Date updated`; cover/title point to the canonical external media page. Normal desktop uses four columns, large desktop five, narrower layouts three, and phones two. The desktop grid width is bounded so cards remain stable and readable. The user's Table/Grid choice is persisted in browser-local storage and survives reload/navigation in that browser without involving authentication state. Detailed rules live in [INTERACTION-DESIGN.md](INTERACTION-DESIGN.md).
 
-## Entry, export, and account paths
+## Entry and export paths
 
 1. Manual Add: category → one canonical provider → exact choice (TV: show → season) → immediate local save → durable enrichment.
 2. Quick Import: one title or supported provider URL per line → bounded provider discovery → review → save.
 3. Canonical CSV: strict provider-ID round trip preserving status/score/progress/notes, with synchronous revalidation.
 4. Markdown export: human-readable snapshot with one table per media type and status-ordered rows inside each table; it is not an import contract.
-5. Account creation: admin-generated one-time registration invite.
-6. Passwordless login: admin assigns a unique email to an existing account → public request returns a generic response → configured transactional-mail adapter sends a short-lived link → GET renders confirmation without consuming → explicit POST consumes and creates the normal session.
-7. Password recovery: admin-generated one-time reset URL for an existing user; a locked-out operator can use `npm run admin:create-password-reset -- <username>` or the direct emergency `admin:set-password` command from the trusted runtime environment.
 
-Messy documents are transformed outside the application into Quick Import lines using the built-in GPT-5.6 helper prompt. The application does not add another LLM-specific import format.
+Messy documents are transformed outside the application into Quick Import lines using a general-purpose assistant when useful. The application does not add another LLM-specific import format.
+
+## Trusted identity resolution
+
+Every business request resolves the identity supplied by the trusted gateway. A known `external_subject` selects its existing local owner directly. On first contact, a verified trusted email may attach that subject to the matching local row; otherwise a new local data-owner row can be materialized from the trusted identity. This mapping exists only to scope media data and does not recreate authentication policy inside the application.
+
+Historical databases may still contain application-auth tables/columns from older releases. The idempotent compatibility migration is allowed to remove that obsolete state while preserving current local users and their media relations.
