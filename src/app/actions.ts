@@ -2,14 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/db";
-import { deleteCurrentSession, requireSessionToken, requireUser } from "@/lib/auth";
-import { decodeCandidateToken } from "@/lib/candidate-token";
+import { requireIdentity } from "@/lib/identity";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
+import { parseCandidateKey, resolveExact } from "@/lib/providers";
 import { addSelectedMediaToUser, deleteUserMediaMany, retryMediaMetadata, updateUserMedia } from "@/lib/services/media";
 import { updateUserProgress } from "@/lib/services/progress";
 import { createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
-import { parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
+import { isMediaType, parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
 
 function str(form: FormData, key: string) {
   const value = form.get(key);
@@ -26,17 +26,14 @@ function returnTo(form: FormData) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
-export async function logoutAction() {
-  await deleteCurrentSession();
-  redirect("/login");
-}
-
 export async function addCandidateAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   try {
-    const sessionToken = await requireSessionToken();
-    const candidate = decodeCandidateToken(str(form, "candidateToken"), sessionToken);
-    if (!candidate) throw new Error("Candidate expired or was changed; search again");
+    const key = parseCandidateKey(str(form, "candidateKey"));
+    const type = str(form, "candidateType");
+    if (!key || !isMediaType(type)) throw new Error("Candidate is invalid; search again");
+    const candidate = await resolveExact(key.source, key.externalId, key.externalSubId, type);
+    if (!candidate) throw new Error("Candidate could not be revalidated; search again");
     const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
     if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
   } catch (error) {
@@ -46,14 +43,14 @@ export async function addCandidateAction(form: FormData) {
 }
 
 export async function retryMetadataAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   const mediaId = str(form, "mediaId");
   if (await retryMediaMetadata(getDatabase().db, user.id, mediaId)) scheduleMediaEnrichment(mediaId);
   redirect(returnTo(form));
 }
 
 export async function quickStatusAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   try {
     const status = parseMediaStatus(str(form, "status"), true)!;
     await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { status });
@@ -64,7 +61,7 @@ export async function quickStatusAction(form: FormData) {
 }
 
 export async function quickScoreAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   try {
     const score = parseOptionalNonNegativeInteger(str(form, "score"), "score", 10);
     await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { score });
@@ -75,7 +72,7 @@ export async function quickScoreAction(form: FormData) {
 }
 
 export async function quickProgressAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   try {
     const progressCurrent = parseOptionalNonNegativeInteger(str(form, "progressCurrent"), "progress_current") ?? 0;
     await updateUserProgress(getDatabase().db, user.id, str(form, "id"), progressCurrent);
@@ -86,7 +83,7 @@ export async function quickProgressAction(form: FormData) {
 }
 
 export async function quickNotesAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   try {
     await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { notes: str(form, "notes") || null });
   } catch (error) {
@@ -96,14 +93,14 @@ export async function quickNotesAction(form: FormData) {
 }
 
 export async function deleteMediaManyAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   const ids = form.getAll("id").filter((value): value is string => typeof value === "string");
   await deleteUserMediaMany(getDatabase().db, user.id, ids);
   redirect(returnTo(form));
 }
 
 export async function quickImportAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   let batchId: string;
   try {
     batchId = await createQuickImport(getDatabase().db, user.id, str(form, "text"));
@@ -114,7 +111,7 @@ export async function quickImportAction(form: FormData) {
 }
 
 export async function canonicalImportAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   let summary: string;
   try {
     const file = form.get("file");
@@ -129,7 +126,7 @@ export async function canonicalImportAction(form: FormData) {
 }
 
 export async function confirmImportAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireIdentity();
   const batchId = str(form, "batchId");
   const selections: Record<string, string> = {};
   for (const [key, value] of form.entries()) if (key.startsWith("row:") && typeof value === "string") selections[key.slice(4)] = value;
