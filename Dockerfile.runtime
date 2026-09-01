@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim
+ENV NODE_ENV=production
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+WORKDIR /app
+COPY --chown=app:app package.json ./package.json
+COPY --chown=app:app node_modules ./node_modules
+COPY --chown=app:app .next ./.next
+COPY --chown=app:app public ./public
+COPY --chown=app:app src ./src
+COPY --chown=app:app scripts ./scripts
+COPY --chown=app:app drizzle ./drizzle
+COPY --chown=app:app drizzle.config.ts tsconfig.json ./
+USER app
+EXPOSE 3000
+CMD ["sh", "-c", "npm run db:migrate && exec npm start -- -H 0.0.0.0 -p 3000"]

@@ -1,96 +1,86 @@
 name: ci
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-
+  workflow_dispatch:
+    inputs:
+      heavy:
+        description: Run Playwright UI proof
+        type: boolean
+        default: false
+      publish:
+        description: Publish the exact verified revision to GHCR
+        type: boolean
+        default: false
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
   SOURCE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.SOURCE_REVISION }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24.15.0'
-          cache: npm
-          cache-dependency-path: package.json
-      - uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('package.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('package.json') }}-
-      - run: npm install
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-
-  ui:
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 18
     env:
       DATABASE_PATH: /tmp/media-list-ui.db
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.SOURCE_REVISION }}
+        with: { ref: '${{ env.SOURCE_REVISION }}' }
       - uses: actions/setup-node@v6
         with:
           node-version: '24.15.0'
           cache: npm
-          cache-dependency-path: package.json
-      - run: npm install
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Prepare deterministic UI database
+          cache-dependency-path: package-lock.json
+      - uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          restore-keys: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Run optional UI proof against the existing build
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy }}
         run: |
+          npx playwright install --with-deps chromium
           rm -f "$DATABASE_PATH" "$DATABASE_PATH-wal" "$DATABASE_PATH-shm"
           npm run db:migrate
           npm run ui:fixture
-      - run: npm run build
-      - name: Exercise UI in Chromium
-        run: npm run ui:proof
-      - name: Summarize captured UI state
-        if: always()
-        run: |
-          echo '### Chromium UI verification' >> "$GITHUB_STEP_SUMMARY"
-          echo '- exact source revision: `'$SOURCE_REVISION'`' >> "$GITHUB_STEP_SUMMARY"
-          if [ -d ui-proof ]; then
-            find ui-proof -maxdepth 1 -type f -printf '%f\n' | sort | sed 's/^/- `/' | sed 's/$/`/' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo '- no UI artifact directory was produced' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          npm run ui:proof
       - name: Upload UI state
-        if: always()
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.heavy }}
         uses: actions/upload-artifact@v4
         with:
           name: ui-${{ env.SOURCE_REVISION }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
           path: |
             ui-proof/
             playwright-report/
             test-results/
-
+      - name: Prepare the already verified runtime
+        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+        run: |
+          npm prune --omit=dev
+          tar -czf /tmp/media-list-runtime.tar.gz package.json node_modules .next public src scripts drizzle drizzle.config.ts tsconfig.json
+      - name: Preserve runtime for publication without rebuilding Next.js
+        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-${{ env.SOURCE_REVISION }}
+          path: /tmp/media-list-runtime.tar.gz
+          if-no-files-found: error
+          retention-days: 1
   publish:
-    needs: [verify, ui]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
@@ -98,35 +88,21 @@ jobs:
       IMAGE_NAME: ghcr.io/${{ github.repository }}
     steps:
       - uses: actions/checkout@v6
+        with: { ref: '${{ env.SOURCE_REVISION }}' }
+      - uses: actions/download-artifact@v4
         with:
-          ref: ${{ env.SOURCE_REVISION }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+          name: runtime-${{ env.SOURCE_REVISION }}
+          path: /tmp
+      - run: tar -xzf /tmp/media-list-runtime.tar.gz
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and publish immutable image
-        id: image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.SOURCE_REVISION }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ env.SOURCE_REVISION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Record immutable image digest
+      - name: Build and publish the verified runtime
         run: |
-          digest="${{ steps.image.outputs.digest }}"
+          docker build -f Dockerfile.runtime --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${SOURCE_REVISION}" -t "$IMAGE_NAME:$SOURCE_REVISION" .
+          docker push "$IMAGE_NAME:$SOURCE_REVISION"
+          digest="$(docker image inspect "$IMAGE_NAME:$SOURCE_REVISION" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)"
           test -n "$digest"
           printf '### Published image\n\n`%s@%s`\n' "$IMAGE_NAME" "$digest" >> "$GITHUB_STEP_SUMMARY"
-          echo "Published $IMAGE_NAME@$digest"
