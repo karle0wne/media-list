@@ -24,8 +24,6 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 18
-    env:
-      DATABASE_PATH: /tmp/media-list-ui.db
     steps:
       - uses: actions/checkout@v6
         with: { ref: '${{ env.SOURCE_REVISION }}' }
@@ -46,6 +44,8 @@ jobs:
       - run: npm run build
       - name: Run optional UI proof against the existing build
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy }}
+        env:
+          DATABASE_PATH: /tmp/media-list-ui.db
         run: |
           npx playwright install --with-deps chromium
           rm -f "$DATABASE_PATH" "$DATABASE_PATH-wal" "$DATABASE_PATH-shm"
@@ -93,7 +93,7 @@ jobs:
         with:
           name: runtime-${{ env.SOURCE_REVISION }}
           path: /tmp
-      - run: tar -xzf /tmp/media-list-runtime.tar.gz
+      - run: mkdir -p /tmp/runtime-context && tar -xzf /tmp/media-list-runtime.tar.gz -C /tmp/runtime-context
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -101,7 +101,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish the verified runtime
         run: |
-          docker build -f Dockerfile.runtime --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${SOURCE_REVISION}" -t "$IMAGE_NAME:$SOURCE_REVISION" .
+          docker build -f "$GITHUB_WORKSPACE/Dockerfile.runtime" --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${SOURCE_REVISION}" -t "$IMAGE_NAME:$SOURCE_REVISION" /tmp/runtime-context
           docker push "$IMAGE_NAME:$SOURCE_REVISION"
           digest="$(docker image inspect "$IMAGE_NAME:$SOURCE_REVISION" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)"
           test -n "$digest"
