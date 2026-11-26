@@ -36,7 +36,11 @@ async function ensureMediaRow(db: AppDb, candidate: MediaCandidate, trust: Media
     else if (trust === "signed")
       await db
         .update(media)
-        .set({ ...candidateMetadataValues(candidate), metadataError: null })
+        .set({
+          ...candidateMetadataValues(candidate),
+          metadataStatus: "PENDING",
+          metadataError: null,
+        })
         .where(eq(media.id, existing.id));
     return (await findMedia(db, candidate)) ?? existing;
   }

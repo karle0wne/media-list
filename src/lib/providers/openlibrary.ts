@@ -1,6 +1,7 @@
 import type { MediaCandidate } from "../types";
 import { providerFetch, providerResponseError } from "./http";
 const API = "https://openlibrary.org";
+const MAX_REDIRECTS = 3;
 type SearchDoc = {
   key?: string;
   title?: string;
@@ -73,15 +74,21 @@ export async function getOpenLibraryWork(id: string): Promise<MediaCandidate | n
   if (!normalized) return null;
   let target = normalized;
   let work = await fetchWork(target);
-  // A merged work answers with a redirect record; follow it once. The identity stays the one
-  // that was asked for, so a saved list position keeps pointing at the same work.
-  if (work?.type?.key === "/type/redirect") {
+  // A merged work answers with a redirect record, and the target may itself have been merged
+  // later; follow a short chain. The identity stays the one that was asked for, so a saved
+  // list position keeps pointing at the same work.
+  const visited = new Set([target]);
+  for (let hop = 0; work?.type?.key === "/type/redirect"; hop++) {
     const next = workId(work.location);
     if (!next) return null;
+    if (hop >= MAX_REDIRECTS || visited.has(next))
+      throw new Error(`Open Library work ${normalized} redirects too many times`);
+    visited.add(next);
     target = next;
     work = await fetchWork(target);
   }
-  if (!work) return null;
+  // A deleted work is an authoritative answer, like a 404.
+  if (!work || work.type?.key === "/type/delete") return null;
   if (!work.title) throw new Error(`Open Library work ${normalized} has no title`);
   const description =
     typeof work.description === "string" ? work.description : work.description?.value;

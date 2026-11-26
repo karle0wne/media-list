@@ -76,7 +76,10 @@ export async function providerFetch(
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError")
       throw new ProviderTimeoutError(timeoutMs, { cause: error });
-    if (error instanceof TypeError) throw new ProviderNetworkError(error.message, { cause: error });
+    // undici reports every network-level failure as `TypeError: fetch failed`; other TypeErrors
+    // (an invalid URL or header) are faults that retrying cannot fix and must stay visible.
+    if (error instanceof TypeError && error.message === "fetch failed")
+      throw new ProviderNetworkError(error.message, { cause: error });
     throw error;
   }
 }

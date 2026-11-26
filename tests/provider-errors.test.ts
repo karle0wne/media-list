@@ -70,6 +70,25 @@ test("network failures are never reported as a missing item", async () => {
   );
 });
 
+test("only a real network failure is retried later; other TypeErrors stay visible", async () => {
+  const { isTemporaryProviderFailure } = await import("../src/lib/providers/http");
+  await withProviders(
+    () => Promise.reject(new TypeError("fetch failed")),
+    async () => {
+      await assert.rejects(getAniListById("1"), (error) => isTemporaryProviderFailure(error));
+    },
+  );
+  await withProviders(
+    () => Promise.reject(new TypeError("Invalid URL")),
+    async () => {
+      await assert.rejects(
+        getAniListById("1"),
+        (error) => error instanceof TypeError && !isTemporaryProviderFailure(error),
+      );
+    },
+  );
+});
+
 test("an unconfigured TMDB is an error to show, not a verdict that the item is missing", async () => {
   const original = process.env.TMDB_API_TOKEN;
   delete process.env.TMDB_API_TOKEN;
@@ -106,6 +125,35 @@ test("an Open Library work that was merged is followed and keeps the requested i
     await assert.rejects(getOpenLibraryWork("OL3W"), /has no title/);
     globalThis.fetch = (async () => new Response("", { status: 404 })) as typeof fetch;
     assert.equal(await getOpenLibraryWork("OL4W"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Open Library follows a short redirect chain, stops at loops, and treats a deleted work as missing", async () => {
+  const { getOpenLibraryWork } = await import("../src/lib/providers/openlibrary");
+  const originalFetch = globalThis.fetch;
+  const redirect = (to: string) =>
+    Response.json({ type: { key: "/type/redirect" }, location: `/works/${to}` });
+  try {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/works/OL1W.json")) return redirect("OL2W");
+      if (url.endsWith("/works/OL2W.json")) return redirect("OL3W");
+      if (url.endsWith("/works/OL3W.json")) return Response.json({ title: "Dune" });
+      return Response.json({ docs: [] });
+    }) as typeof fetch;
+    assert.equal((await getOpenLibraryWork("OL1W"))?.title, "Dune");
+
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      return url.endsWith("/works/OL5W.json") ? redirect("OL6W") : redirect("OL5W");
+    }) as typeof fetch;
+    await assert.rejects(getOpenLibraryWork("OL5W"), /redirects too many times/);
+
+    globalThis.fetch = (async () =>
+      Response.json({ type: { key: "/type/delete" } })) as typeof fetch;
+    assert.equal(await getOpenLibraryWork("OL7W"), null);
   } finally {
     globalThis.fetch = originalFetch;
   }

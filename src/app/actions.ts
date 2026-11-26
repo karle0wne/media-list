@@ -131,7 +131,7 @@ export async function canonicalImportAction(form: FormData) {
     if (!(file instanceof File) || file.size === 0) throw new Error("Choose a canonical CSV file");
     if (file.size > 2_000_000) throw new Error("Canonical CSV is too large (2 MB max)");
     const report = await importCanonical(getDatabase().db, user.id, await file.text());
-    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.adjusted ? `; ${report.adjusted} row${report.adjusted === 1 ? "" : "s"} had progress above the total and keep an unknown total` : ""}${report.errors[0] ? `; ${report.errors[0]}` : ""}${report.needsEnrichment || report.totalLookups.length ? "; details are filling in the background" : ""}`;
+    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.adjusted ? `; ${report.adjusted} row${report.adjusted === 1 ? "" : "s"} had progress above the expected total; their total is left unknown` : ""}${report.errors[0] ? `; ${report.errors[0]}` : ""}${report.needsEnrichment || report.totalLookups.length ? "; details are filling in the background" : ""}`;
     if (report.needsEnrichment || report.totalLookups.length)
       scheduleEnrichmentBacklog(report.totalLookups);
   } catch (error) {

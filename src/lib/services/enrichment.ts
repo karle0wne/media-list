@@ -26,9 +26,14 @@ const active = new Set<string>();
 const DEFAULT_COOLDOWN_MS = 60_000;
 const MAX_COOLDOWN_MS = 15 * 60_000;
 const cooldowns = new Map<ExternalSource, number>();
+// A record whose id makes the provider fail every time must not stay PENDING (and pause the
+// provider) for good: after a few temporary failures in a row it becomes an error to retry.
+const MAX_DEFERRALS = 5;
+const deferrals = new Map<string, number>();
 
 export function resetEnrichmentCooldowns() {
   cooldowns.clear();
+  deferrals.clear();
 }
 
 function coolingSources(now: number) {
@@ -79,6 +84,10 @@ export async function enrichMediaMetadata(
   try {
     const item = await findMediaById(db, mediaId);
     if (!item || item.metadataStatus === "READY") return { state: "skipped" as const };
+    // A provider that asked to be left alone is not called for single records either; the
+    // record stays PENDING for a later pass.
+    if (coolingSources(clock()).includes(item.externalSource))
+      return { state: "deferred" as const, error: "Provider is paused after a recent failure" };
     try {
       const candidate = await resolver(
         item.externalSource,
@@ -88,9 +97,12 @@ export async function enrichMediaMetadata(
       );
       if (!candidate) throw new Error("Provider validation failed");
       await applyProviderCandidate(db, item, candidate);
+      deferrals.delete(mediaId);
       return { state: "ready" as const };
     } catch (error) {
-      if (isTemporaryProviderFailure(error)) {
+      const failures = (deferrals.get(mediaId) ?? 0) + 1;
+      if (isTemporaryProviderFailure(error) && failures < MAX_DEFERRALS) {
+        deferrals.set(mediaId, failures);
         // A rate limit or outage says nothing about the item: it stays PENDING and is tried
         // again later instead of becoming an error the user has to retry by hand.
         deferSource(item.externalSource, error, clock());
@@ -99,6 +111,7 @@ export async function enrichMediaMetadata(
           error: error instanceof Error ? error.message : "Provider temporarily unavailable",
         };
       }
+      deferrals.delete(mediaId);
       const message = (error instanceof Error ? error.message : "Metadata enrichment failed").slice(
         0,
         500,
@@ -148,12 +161,19 @@ export async function adoptTotalsForMedia(
       type: item.type,
     });
     await adoptTotalForOwners(db, mediaId, candidate);
+    deferrals.delete(`total:${mediaId}`);
     return { state: "ready" as const };
   } catch (error) {
-    if (isTemporaryProviderFailure(error)) {
+    // The lookup queue re-offers deferred ids, so the same cap as for records applies: an id
+    // the provider keeps failing on is dropped after a few attempts instead of cycling forever.
+    const key = `total:${mediaId}`;
+    const failures = (deferrals.get(key) ?? 0) + 1;
+    if (isTemporaryProviderFailure(error) && failures < MAX_DEFERRALS) {
+      deferrals.set(key, failures);
       deferSource(item.externalSource, error, clock());
       return { state: "deferred" as const };
     }
+    deferrals.delete(key);
     return { state: "error" as const };
   }
 }
@@ -234,17 +254,26 @@ export async function enrichPendingBacklog(db: AppDb, options: DrainOptions = {}
     await sleep(Math.max(0, waitUntil - clock()));
   }
 
-  for (const mediaId of new Set(options.totalLookups ?? [])) {
+  const unfinished: string[] = [];
+  const lookups = [...new Set(options.totalLookups ?? [])];
+  for (const [index, mediaId] of lookups.entries()) {
     let result = await adoptTotalsForMedia(db, mediaId, resolver, clock);
     if (result.state === "deferred") {
       const waitUntil = cooldownEnd(clock());
-      if (waitUntil == null || waitUntil - clock() > maxWaitMs) continue;
-      await sleep(Math.max(0, waitUntil - clock()));
-      result = await adoptTotalsForMedia(db, mediaId, resolver, clock);
+      if (waitUntil != null && waitUntil - clock() <= maxWaitMs) {
+        await sleep(Math.max(0, waitUntil - clock()));
+        result = await adoptTotalsForMedia(db, mediaId, resolver, clock);
+      }
+    }
+    // Still deferred: the provider is unavailable for longer than this run waits. Hand the
+    // rest back so a later pass can finish them instead of leaving positions without totals.
+    if (result.state === "deferred") {
+      unfinished.push(...lookups.slice(index));
+      break;
     }
     if (result.state === "ready" && pauseMs > 0) await sleep(pauseMs);
   }
-  return processed;
+  return { processed, unfinished };
 }
 
 async function adoptTotalForOwners(db: AppDb, mediaId: string, candidate: MediaCandidate) {

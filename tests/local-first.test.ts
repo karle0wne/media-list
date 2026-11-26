@@ -10,6 +10,7 @@ import {
   ProviderTimeoutError,
 } from "../src/lib/providers/http";
 import {
+  adoptTotalsForMedia,
   applyProviderCandidate,
   enrichMediaMetadata,
   enrichPendingBacklog,
@@ -207,7 +208,8 @@ test("the backlog drain completes pending records", async () => {
         return { ...exact, source, externalId, key: `${source}:${externalId}:`, episodeCount: 1 };
       },
     });
-    assert.equal(processed, 3);
+    assert.equal(processed.processed, 3);
+    assert.deepEqual(processed.unfinished, []);
     assert.equal(calls, 3);
     assert.equal(
       (await db.select().from(media)).every((m) => m.metadataStatus === "READY"),
@@ -568,5 +570,134 @@ test("records of an unconfigured provider fail at once without pacing, since not
     assert.equal(item.metadataError, "TMDB_API_TOKEN is not configured");
   } finally {
     sqlite.close();
+  }
+});
+
+test("a record the provider keeps failing on becomes an error after a few attempts", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const added = await addSelectedMediaToUser(db, a, anime);
+    let now = 1_000_000;
+    const clock = () => now;
+    const resolver = async () => {
+      throw new ProviderResponseError("AniList", 503, null);
+    };
+    const results = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      results.push((await enrichMediaMetadata(db, added.item.id, resolver, clock)).state);
+      now += 60 * 60_000; // the provider's pause is over before the next attempt
+    }
+    assert.deepEqual(results, ["deferred", "deferred", "deferred", "deferred", "error"]);
+    const [item] = await db.select().from(media);
+    assert.equal(item.metadataStatus, "ERROR");
+    assert.match(item.metadataError ?? "", /temporarily unavailable/);
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("a single record is not sent to a provider that asked to be left alone", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const added = await addSelectedMediaToUser(db, a, anime);
+    let calls = 0;
+    const clock = () => 1_000_000;
+    const limited = async () => {
+      calls += 1;
+      throw new ProviderResponseError("AniList", 429, 900);
+    };
+    assert.equal((await enrichMediaMetadata(db, added.item.id, limited, clock)).state, "deferred");
+    assert.equal((await enrichMediaMetadata(db, added.item.id, limited, clock)).state, "deferred");
+    assert.equal(calls, 1, "the second call respects the pause");
+    assert.equal((await db.select().from(media))[0].metadataStatus, "PENDING");
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("a signed add puts a failed shared record back to pending", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db, "user_a");
+    const b = await createTestDataOwner(db, "user_b");
+    await addSelectedMediaToUser(db, a, anime);
+    await db.update(media).set({ metadataStatus: "ERROR", metadataError: "old failure" });
+    const result = await addSelectedMediaToUser(db, b, exact, {}, { trust: "signed" });
+    assert.equal(result.needsEnrichment, true);
+    const [item] = await db.select().from(media);
+    assert.deepEqual([item.metadataStatus, item.metadataError], ["PENDING", null]);
+    assert.equal(item.title, "Canonical");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("total lookups the provider could not serve are handed back, not dropped", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db, "user_a");
+    const b = await createTestDataOwner(db, "user_b");
+    await addMediaToUser(db, a, { ...exact, episodeCount: 220 });
+    const report = await importCanonical(
+      db,
+      b,
+      "external_source,external_id,type,status\nANILIST,777001,ANIME,COMPLETED\n",
+    );
+    assert.equal(report.totalLookups.length, 1);
+
+    const down = await enrichPendingBacklog(db, {
+      pauseMs: 0,
+      maxWaitMs: 0,
+      totalLookups: report.totalLookups,
+      resolver: async () => {
+        throw new ProviderResponseError("AniList", 503, null);
+      },
+    });
+    assert.deepEqual(down.unfinished, report.totalLookups);
+    let [row] = await rows(db, b);
+    assert.deepEqual([row.progressCurrent, row.progressTotal], [0, null]);
+
+    resetEnrichmentCooldowns(); // the provider is back
+    const up = await enrichPendingBacklog(db, {
+      pauseMs: 0,
+      totalLookups: down.unfinished,
+      resolver: async () => ({ ...exact, episodeCount: 220 }),
+    });
+    assert.deepEqual(up.unfinished, []);
+    [row] = await rows(db, b);
+    assert.deepEqual([row.progressCurrent, row.progressTotal], [220, 220]);
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("a total lookup the provider keeps failing on is given up after a few attempts", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const added = await addMediaToUser(db, a, exact);
+    let now = 1_000_000;
+    const clock = () => now;
+    const resolver = async () => {
+      throw new ProviderResponseError("AniList", 503, null);
+    };
+    const states: string[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      states.push((await adoptTotalsForMedia(db, added.item.id, resolver, clock)).state);
+      now += 60 * 60_000;
+    }
+    assert.deepEqual(states, ["deferred", "deferred", "deferred", "deferred", "error"]);
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
   }
 });
