@@ -1,4 +1,5 @@
-import type { MediaStatus, MediaType } from "@/lib/types";
+import { STATUS_LABELS, TYPE_LABELS } from "@/lib/labels";
+import type { MediaStatus } from "@/lib/types";
 import { ProviderCover } from "./provider-cover";
 import type { LibraryRow } from "./library-table";
 
@@ -7,7 +8,7 @@ export function LibraryGrid({ items }: { items: LibraryRow[] }) {
     <div className="libraryGrid" aria-label="Media grid">
       {items.map((item) => {
         const progress = progressLabel(item);
-        const status = statusLabel(item.status);
+        const status = STATUS_LABELS[item.status];
 
         return (
           <article
@@ -31,7 +32,7 @@ export function LibraryGrid({ items }: { items: LibraryRow[] }) {
                 />
               ) : (
                 <div className="mediaGridCover mediaGridCoverPlaceholder">
-                  {typeLabel(item.type)}
+                  {TYPE_LABELS[item.type]}
                 </div>
               )}
             </a>
@@ -47,7 +48,7 @@ export function LibraryGrid({ items }: { items: LibraryRow[] }) {
               </a>
 
               <div className="mediaGridMeta">
-                {typeLabel(item.type)}
+                {TYPE_LABELS[item.type]}
                 {item.year ? ` · ${item.year}` : ""}
               </div>
 
@@ -79,30 +80,6 @@ function progressLabel(item: LibraryRow) {
     return `${item.progressCurrent}${suffix}`;
   }
   return null;
-}
-
-function statusLabel(status: MediaStatus) {
-  return (
-    {
-      IN_PROGRESS: "In progress",
-      COMPLETED: "Completed",
-      ON_HOLD: "On hold",
-      DROPPED: "Dropped",
-      PLANNED: "Planned",
-    } as const
-  )[status];
-}
-
-function typeLabel(type: MediaType) {
-  return (
-    {
-      ANIME: "Anime",
-      MOVIE: "Movie",
-      SERIES: "Series",
-      BOOK: "Book",
-      GAME: "Game",
-    } as const
-  )[type];
 }
 
 function statusClass(status: MediaStatus) {

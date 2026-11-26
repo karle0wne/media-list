@@ -197,10 +197,6 @@ h2 {
   flex-direction: column;
   gap: 14px;
 }
-.narrow {
-  max-width: 430px;
-  margin: 50px auto;
-}
 label {
   display: flex;
   flex-direction: column;
@@ -257,14 +253,6 @@ button.danger {
   padding: 5px 8px;
   font-size: 12px;
 }
-.linkButton {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font-weight: 400;
-  text-decoration: underline;
-}
 .pageTitle {
   display: flex;
   justify-content: space-between;
@@ -297,19 +285,12 @@ button.danger {
   flex: 0 0 auto;
   background: var(--panel-2);
 }
-.badge,
 .typeBadge {
   font-size: 11px;
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 2px 7px;
   color: var(--muted);
-}
-.libraryTitle {
-  margin-bottom: 14px;
-}
-.listSummary {
-  font-size: 13px;
 }
 .statusTabs {
   display: flex;
@@ -334,31 +315,6 @@ button.danger {
 .statusTabs a.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-}
-.listTools {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.listSearch {
-  display: flex;
-  gap: 7px;
-  flex: 1;
-}
-.listSearch input {
-  min-width: 160px;
-  flex: 1;
-}
-.listTools input,
-.listTools select,
-.listTools button {
-  padding: 7px 9px;
-  font-size: 13px;
-}
-.clearFilter {
-  font-size: 12px;
-  color: var(--muted);
 }
 .selectionBar {
   min-height: 36px;
@@ -540,7 +496,6 @@ dialog::backdrop {
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(2px);
 }
-.editDialog,
 .settingsDialog {
   width: min(620px, calc(100vw - 28px));
   padding: 18px;
@@ -566,30 +521,16 @@ dialog::backdrop {
   font-size: 20px;
   line-height: 1;
 }
-.dialogEditForm,
 .settingsGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-}
-.dialogEditForm .wide {
-  grid-column: 1/-1;
-}
-.dialogEditForm input,
-.dialogEditForm select,
-.dialogEditForm textarea {
-  width: 100%;
 }
 .dialogActions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
-}
-.dialogDelete {
-  margin-top: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
 }
 .settingsDialog fieldset {
   border: 0;
@@ -619,19 +560,6 @@ dialog::backdrop {
 .inlineChoice {
   align-self: end;
   padding-bottom: 8px;
-}
-.settingsButton {
-  white-space: nowrap;
-}
-.grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.grid2 pre {
-  overflow: auto;
-  white-space: pre-wrap;
-  font-size: 12px;
 }
 .candidateList {
   display: flex;
@@ -724,23 +652,9 @@ td {
   .pageTitle {
     align-items: flex-start;
   }
-  .libraryTitle .button {
-    padding: 7px 9px;
-    font-size: 12px;
-  }
   .statusTabs a {
     padding: 8px 10px;
     font-size: 12px;
-  }
-  .listTools {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-  .listSearch {
-    width: 100%;
-  }
-  .listSearch input {
-    width: 100%;
   }
   .filters,
   .searchbar {
@@ -750,9 +664,6 @@ td {
   .searchbar input {
     grid-column: 1/-1;
   }
-  .grid2 {
-    grid-template-columns: 1fr;
-  }
   .result {
     gap: 10px;
   }
@@ -760,12 +671,8 @@ td {
     width: 62px;
     height: 88px;
   }
-  .dialogEditForm,
   .settingsGrid {
     grid-template-columns: 1fr;
-  }
-  .dialogEditForm .wide {
-    grid-column: 1;
   }
   .choiceGrid {
     grid-template-columns: 1fr 1fr;

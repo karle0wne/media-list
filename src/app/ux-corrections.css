@@ -76,8 +76,7 @@
   font-size: 11px;
   background: var(--panel-2);
 }
-.progressTotal,
-.progressReadOnly {
+.progressTotal {
   color: var(--muted);
 }
 .legendAction {

@@ -10,6 +10,7 @@ import {
   retryMetadataAction,
 } from "@/app/actions";
 import { areAllVisibleSelected, reconcileSelection } from "@/lib/library-view";
+import { STATUS_LABELS, STATUS_ORDER, TYPE_LABELS } from "@/lib/labels";
 import type { MediaSort, SortDirection } from "@/lib/services/media";
 import type { MediaStatus, MediaType } from "@/lib/types";
 import { ProviderCover } from "./provider-cover";
@@ -36,13 +37,10 @@ export type LibraryRow = {
   updatedAt: string;
 };
 type SortLinks = Record<MediaSort, Record<SortDirection, string>>;
-const statuses: Array<[MediaStatus, string]> = [
-  ["IN_PROGRESS", "In progress"],
-  ["COMPLETED", "Completed"],
-  ["ON_HOLD", "On hold"],
-  ["DROPPED", "Dropped"],
-  ["PLANNED", "Planned"],
-];
+const statuses: Array<[MediaStatus, string]> = STATUS_ORDER.map((status) => [
+  status,
+  STATUS_LABELS[status],
+]);
 
 export function LibraryTable({
   items,
@@ -247,7 +245,7 @@ export function LibraryTable({
                 )}
                 {visible.has("type") && (
                   <td className="compactCell">
-                    <span className="typeBadge">{typeLabel(item.type)}</span>
+                    <span className="typeBadge">{TYPE_LABELS[item.type]}</span>
                   </td>
                 )}
                 {visible.has("added") && (
@@ -392,9 +390,4 @@ function toggleSet(previous: Set<string>, id: string) {
   if (next.has(id)) next.delete(id);
   else next.add(id);
   return next;
-}
-function typeLabel(type: MediaType) {
-  return (
-    { ANIME: "Anime", MOVIE: "Movie", SERIES: "Series", BOOK: "Book", GAME: "Game" } as const
-  )[type];
 }

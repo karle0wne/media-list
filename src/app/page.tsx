@@ -14,16 +14,13 @@ import {
   parseVisibleColumns,
   VIEW_MODE_COOKIE,
 } from "@/lib/library-view";
+import { STATUS_LABELS, STATUS_ORDER } from "@/lib/labels";
 import { LibraryWorkspace } from "@/components/library-workspace";
 import { singleSearchParams, type RawSearchParams } from "@/lib/search-params";
 
 const statuses: Array<[string, MediaStatus | ""]> = [
   ["All", ""],
-  ["In progress", "IN_PROGRESS"],
-  ["Completed", "COMPLETED"],
-  ["On hold", "ON_HOLD"],
-  ["Dropped", "DROPPED"],
-  ["Planned", "PLANNED"],
+  ...STATUS_ORDER.map((status): [string, MediaStatus] => [STATUS_LABELS[status], status]),
 ];
 
 const sortKeys = new Set<MediaSort>([
