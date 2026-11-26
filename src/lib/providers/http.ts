@@ -11,22 +11,33 @@ export class ProviderResponseError extends Error {
   }
 }
 
-export async function providerFetch(input: string | URL | Request, init: RequestInit = {}, timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS) {
+export async function providerFetch(
+  input: string | URL | Request,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
+) {
   try {
     return await fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error(`Provider request timed out after ${timeoutMs}ms`, { cause: error });
+    if (error instanceof DOMException && error.name === "TimeoutError")
+      throw new Error(`Provider request timed out after ${timeoutMs}ms`, { cause: error });
     throw error;
   }
 }
 
 export function providerResponseError(provider: string, response: Response) {
-  return new ProviderResponseError(provider, response.status, retryAfterSeconds(response.headers.get("retry-after")));
+  return new ProviderResponseError(
+    provider,
+    response.status,
+    retryAfterSeconds(response.headers.get("retry-after")),
+  );
 }
 
 function providerMessage(provider: string, status: number, retryAfter: number | null) {
-  if (status === 429) return `${provider} rate limit reached${retryAfter != null ? `; retry in about ${retryAfter}s` : ""}. Your saved list is unaffected; metadata can be retried later.`;
-  if (status >= 500) return `${provider} is temporarily unavailable (${status}). Your saved list is unaffected; metadata can be retried later.`;
+  if (status === 429)
+    return `${provider} rate limit reached${retryAfter != null ? `; retry in about ${retryAfter}s` : ""}. Your saved list is unaffected; metadata can be retried later.`;
+  if (status >= 500)
+    return `${provider} is temporarily unavailable (${status}). Your saved list is unaffected; metadata can be retried later.`;
   return `${provider} request failed: ${status}`;
 }
 

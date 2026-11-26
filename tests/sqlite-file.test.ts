@@ -13,10 +13,14 @@ test("sqlite snapshot is healthy and restore atomically replaces the target", as
   const target = join(dir, "target.db");
   try {
     const sourceDb = new DatabaseSync(source);
-    sourceDb.exec("CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('new-state')");
+    sourceDb.exec(
+      "CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('new-state')",
+    );
     sourceDb.close();
     const targetDb = new DatabaseSync(target);
-    targetDb.exec("CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('old-state')");
+    targetDb.exec(
+      "CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('old-state')",
+    );
     targetDb.close();
 
     await snapshotDatabase(snapshot, source);
@@ -25,7 +29,10 @@ test("sqlite snapshot is healthy and restore atomically replaces the target", as
 
     const restored = new DatabaseSync(target);
     try {
-      assert.equal((restored.prepare("SELECT value FROM sample").get() as { value: string }).value, "new-state");
+      assert.equal(
+        (restored.prepare("SELECT value FROM sample").get() as { value: string }).value,
+        "new-state",
+      );
     } finally {
       restored.close();
     }
@@ -41,7 +48,9 @@ test("sqlite restore rejects a corrupt source without replacing the target", asy
   try {
     await writeFile(source, "not-a-sqlite-database");
     const targetDb = new DatabaseSync(target);
-    targetDb.exec("CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('keep-me')");
+    targetDb.exec(
+      "CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('keep-me')",
+    );
     targetDb.close();
     const before = await readFile(target);
 
@@ -58,7 +67,9 @@ test("sqlite restore rejects a missing source without creating it or replacing t
   const target = join(dir, "target.db");
   try {
     const targetDb = new DatabaseSync(target);
-    targetDb.exec("CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('keep-me')");
+    targetDb.exec(
+      "CREATE TABLE sample (value TEXT NOT NULL); INSERT INTO sample(value) VALUES ('keep-me')",
+    );
     targetDb.close();
     const before = await readFile(target);
 

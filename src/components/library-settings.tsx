@@ -50,11 +50,8 @@ export function LibrarySettings({
   const displayForm = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const effectiveTypes = selectedTypes.length
-    ? selectedTypes
-    : types.map(([value]) => value);
-  const hasActiveFilter =
-    selectedTypes.length > 0 || scoreMin !== undefined || hasNotes;
+  const effectiveTypes = selectedTypes.length ? selectedTypes : types.map(([value]) => value);
+  const hasActiveFilter = selectedTypes.length > 0 || scoreMin !== undefined || hasNotes;
 
   function navigate(params: URLSearchParams) {
     router.push(params.toString() ? `/?${params}` : "/");
@@ -85,9 +82,7 @@ export function LibrarySettings({
     params.delete("dir");
 
     const nextSort = String(data.get("sort") ?? DEFAULT_LIBRARY_SORT);
-    const nextDirection = String(
-      data.get("dir") ?? DEFAULT_LIBRARY_DIRECTION,
-    );
+    const nextDirection = String(data.get("dir") ?? DEFAULT_LIBRARY_DIRECTION);
 
     if (nextSort !== DEFAULT_LIBRARY_SORT) params.set("sort", nextSort);
     if (nextDirection !== DEFAULT_LIBRARY_DIRECTION) {
@@ -103,24 +98,16 @@ export function LibrarySettings({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("cols");
 
-    const serialized = serializeVisibleColumns(
-      data.getAll("column").map(String),
-    );
+    const serialized = serializeVisibleColumns(data.getAll("column").map(String));
     if (serialized) params.set("cols", serialized);
 
     navigate(params);
     displayDialog.current?.close();
   }
 
-  function setChecks(
-    form: HTMLFormElement | null,
-    name: string,
-    values: readonly string[],
-  ) {
+  function setChecks(form: HTMLFormElement | null, name: string, values: readonly string[]) {
     if (!form) return;
-    for (const input of form.querySelectorAll<HTMLInputElement>(
-      `input[name="${name}"]`,
-    )) {
+    for (const input of form.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)) {
       input.checked = values.includes(input.value);
     }
   }
@@ -153,11 +140,7 @@ export function LibrarySettings({
         </button>
       </div>
 
-      <dialog
-        className="settingsDialog"
-        ref={filterDialog}
-        aria-labelledby="list-filter-title"
-      >
+      <dialog className="settingsDialog" ref={filterDialog} aria-labelledby="list-filter-title">
         <form
           ref={filterForm}
           onSubmit={(event) => {
@@ -225,11 +208,7 @@ export function LibrarySettings({
               </select>
             </label>
             <label className="checkChoice inlineChoice">
-              <input
-                type="checkbox"
-                name="hasNotes"
-                defaultChecked={hasNotes}
-              />
+              <input type="checkbox" name="hasNotes" defaultChecked={hasNotes} />
               Only items with notes
             </label>
           </div>
@@ -296,11 +275,7 @@ export function LibrarySettings({
           </div>
 
           <div className="dialogActions">
-            <button
-              className="secondary"
-              type="button"
-              onClick={() => sortDialog.current?.close()}
-            >
+            <button className="secondary" type="button" onClick={() => sortDialog.current?.close()}>
               Cancel
             </button>
             <button type="submit">Apply sort</button>
@@ -341,13 +316,7 @@ export function LibrarySettings({
               <button
                 className="textAction legendAction"
                 type="button"
-                onClick={() =>
-                  setChecks(
-                    displayForm.current,
-                    "column",
-                    DEFAULT_VISIBLE_COLUMNS,
-                  )
-                }
+                onClick={() => setChecks(displayForm.current, "column", DEFAULT_VISIBLE_COLUMNS)}
               >
                 Reset to default
               </button>

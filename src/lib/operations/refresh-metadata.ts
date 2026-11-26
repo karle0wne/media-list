@@ -12,15 +12,26 @@ export async function refreshTmdbMetadata(now = new Date()) {
   const cutoff = new Date(now.getTime() - staleDays * 86_400_000);
   const { db, sqlite } = openDatabase();
   try {
-    const stale = await db.select().from(media).where(and(
-      eq(media.externalSource, "TMDB"),
-      or(isNull(media.metadataRefreshedAt), lt(media.metadataRefreshedAt, cutoff)),
-    )).limit(limit);
+    const stale = await db
+      .select()
+      .from(media)
+      .where(
+        and(
+          eq(media.externalSource, "TMDB"),
+          or(isNull(media.metadataRefreshedAt), lt(media.metadataRefreshedAt, cutoff)),
+        ),
+      )
+      .limit(limit);
     let refreshed = 0;
     let failed = 0;
     for (const item of stale) {
       try {
-        const candidate = await resolveExact("TMDB", item.externalId, item.externalSubId, item.type);
+        const candidate = await resolveExact(
+          "TMDB",
+          item.externalId,
+          item.externalSubId,
+          item.type,
+        );
         if (!candidate) {
           failed += 1;
           continue;

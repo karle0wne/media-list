@@ -29,11 +29,16 @@ function withEnv(name: string, value: string | undefined, fn: () => void) {
 test("runtime config is optional and application values have environment overrides", () => {
   const dir = mkdtempSync(join(tmpdir(), "media-list-config-"));
   const file = join(dir, "application.json");
-  writeFileSync(file, JSON.stringify({
-    databasePath: "/data/from-config.db",
-    tmdb: { metadataTtlDays: 14, refreshLimit: 25 },
-    backup: { s3: { endpoint: "https://s3.example", region: "auto", bucket: "media", prefix: "backup/" } },
-  }));
+  writeFileSync(
+    file,
+    JSON.stringify({
+      databasePath: "/data/from-config.db",
+      tmdb: { metadataTtlDays: 14, refreshLimit: 25 },
+      backup: {
+        s3: { endpoint: "https://s3.example", region: "auto", bucket: "media", prefix: "backup/" },
+      },
+    }),
+  );
   try {
     const config = loadRuntimeConfig(file);
     assert.equal(databasePathSetting(config), "/data/from-config.db");
@@ -74,7 +79,10 @@ test("unknown or invalid application config fails closed", () => {
     assert.throws(() => loadRuntimeConfig(invalid), /positive integer <= 500/);
 
     const nested = join(dir, "nested.json");
-    writeFileSync(nested, JSON.stringify({ backup: { s3: { secretAccessKey: "must-not-be-here" } } }));
+    writeFileSync(
+      nested,
+      JSON.stringify({ backup: { s3: { secretAccessKey: "must-not-be-here" } } }),
+    );
     assert.throws(() => loadRuntimeConfig(nested), /unsupported fields: secretAccessKey/);
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -19,7 +19,8 @@ test("media-list no longer owns an authentication surface", () => {
     "src/lib/mail.ts",
     "src/lib/services/users.ts",
     "src/lib/services/external-users.ts",
-  ]) assert.equal(existsSync(path), false, `${path} must stay removed`);
+  ])
+    assert.equal(existsSync(path), false, `${path} must stay removed`);
 
   const pkg = read("package.json");
   assert.doesNotMatch(pkg, /admin:create|admin:set-password|admin:create-password-reset/);

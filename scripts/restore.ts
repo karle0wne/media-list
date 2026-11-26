@@ -19,7 +19,9 @@ runCli(async () => {
     object = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: backupKey }));
   } catch (error) {
     if (isMissingS3Object(error)) {
-      console.log(`No backup at s3://${config.bucket}/${backupKey}; treating this as first bootstrap`);
+      console.log(
+        `No backup at s3://${config.bucket}/${backupKey}; treating this as first bootstrap`,
+      );
       return;
     }
     throw error;

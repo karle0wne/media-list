@@ -8,19 +8,33 @@ test("AniList requests and stores the medium cover variant", async () => {
     let requestBody = "";
     globalThis.fetch = async (_input, init) => {
       requestBody = String(init?.body ?? "");
-      return Response.json({ data: { Page: { media: [{
-        id: 1,
-        title: { romaji: "Example", english: "Example", native: "例" },
-        episodes: 12,
-        duration: 24,
-        startDate: { year: 2026 },
-        coverImage: { medium: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/example.jpg" },
-      }] } } });
+      return Response.json({
+        data: {
+          Page: {
+            media: [
+              {
+                id: 1,
+                title: { romaji: "Example", english: "Example", native: "例" },
+                episodes: 12,
+                duration: 24,
+                startDate: { year: 2026 },
+                coverImage: {
+                  medium:
+                    "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/example.jpg",
+                },
+              },
+            ],
+          },
+        },
+      });
     };
 
     const results = await searchAniList("example", 1);
     assert.match(requestBody, /coverImage \{ medium \}/);
-    assert.equal(results[0].coverUrl, "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/example.jpg");
+    assert.equal(
+      results[0].coverUrl,
+      "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/example.jpg",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

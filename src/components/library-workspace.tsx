@@ -47,11 +47,7 @@ export function LibraryWorkspace({
   query: string;
   hiddenSearchParams: Array<[string, string]>;
 }) {
-  const viewMode = useSyncExternalStore(
-    subscribeToViewMode,
-    readViewMode,
-    defaultViewMode,
-  );
+  const viewMode = useSyncExternalStore(subscribeToViewMode, readViewMode, defaultViewMode);
 
   function chooseView(mode: ViewMode) {
     window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);

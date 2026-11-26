@@ -10,10 +10,35 @@ test("RAWG discovery is fuzzy and exact lookups normalize slugs to numeric ident
   try {
     const calls: string[] = [];
     globalThis.fetch = async (input) => {
-      const url = String(input); calls.push(url);
-      if (url.includes("/games?")) return Response.json({ results: [{ id: 3498, name: "Postal 2", released: "2003-04-14", background_image: "https://media.rawg.io/media/games/456/example.jpg" }] });
-      if (url.includes("/games/postal-2")) return Response.json({ id: 3498, slug: "postal-2", name: "Postal 2", released: "2003-04-14", background_image: "https://media.rawg.io/media/games/456/example.jpg", description_raw: "Game details" });
-      if (url.includes("/games/3498")) return Response.json({ id: 3498, slug: "postal-2", name: "Postal 2", released: "2003-04-14" });
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/games?"))
+        return Response.json({
+          results: [
+            {
+              id: 3498,
+              name: "Postal 2",
+              released: "2003-04-14",
+              background_image: "https://media.rawg.io/media/games/456/example.jpg",
+            },
+          ],
+        });
+      if (url.includes("/games/postal-2"))
+        return Response.json({
+          id: 3498,
+          slug: "postal-2",
+          name: "Postal 2",
+          released: "2003-04-14",
+          background_image: "https://media.rawg.io/media/games/456/example.jpg",
+          description_raw: "Game details",
+        });
+      if (url.includes("/games/3498"))
+        return Response.json({
+          id: 3498,
+          slug: "postal-2",
+          name: "Postal 2",
+          released: "2003-04-14",
+        });
       return new Response("unexpected", { status: 500 });
     };
 
@@ -32,12 +57,18 @@ test("RAWG discovery is fuzzy and exact lookups normalize slugs to numeric ident
     assert.equal(fromUrl[0]?.source, "RAWG");
   } finally {
     globalThis.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.RAWG_API_KEY; else process.env.RAWG_API_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.RAWG_API_KEY;
+    else process.env.RAWG_API_KEY = originalKey;
   }
 });
 
 test("RAWG configuration is optional", () => {
   const originalKey = process.env.RAWG_API_KEY;
-  try { delete process.env.RAWG_API_KEY; assert.equal(rawgConfigured(), false); }
-  finally { if (originalKey === undefined) delete process.env.RAWG_API_KEY; else process.env.RAWG_API_KEY = originalKey; }
+  try {
+    delete process.env.RAWG_API_KEY;
+    assert.equal(rawgConfigured(), false);
+  } finally {
+    if (originalKey === undefined) delete process.env.RAWG_API_KEY;
+    else process.env.RAWG_API_KEY = originalKey;
+  }
 });

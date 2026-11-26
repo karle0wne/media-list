@@ -6,9 +6,18 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 
-const tsx = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+const tsx = join(
+  process.cwd(),
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "tsx.cmd" : "tsx",
+);
 
-function run(script: string, args: string[] = [], extraEnv: Record<string, string | undefined> = {}) {
+function run(
+  script: string,
+  args: string[] = [],
+  extraEnv: Record<string, string | undefined> = {},
+) {
   const env = { ...process.env, ...extraEnv };
   delete env.S3_ENDPOINT;
   delete env.S3_BUCKET;
@@ -21,7 +30,11 @@ function run(script: string, args: string[] = [], extraEnv: Record<string, strin
 
 function assertNoTransformFailure(result: ReturnType<typeof run>, script: string) {
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  assert.doesNotMatch(output, /Top-level await is currently not supported|TransformError/, `${script} failed before its runtime logic`);
+  assert.doesNotMatch(
+    output,
+    /Top-level await is currently not supported|TransformError/,
+    `${script} failed before its runtime logic`,
+  );
 }
 
 test("operational CLI entrypoints execute through the tsx binary used in production", () => {
@@ -51,7 +64,8 @@ test("operational CLI entrypoints execute through the tsx binary used in product
       ["maintenance", []],
       ["refresh-metadata", []],
     ];
-    for (const [script, args] of cases) assertNoTransformFailure(run(script, args, { DATABASE_PATH: database }), script);
+    for (const [script, args] of cases)
+      assertNoTransformFailure(run(script, args, { DATABASE_PATH: database }), script);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

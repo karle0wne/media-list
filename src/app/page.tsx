@@ -2,11 +2,7 @@ import "./library.css";
 import { requireIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
-import {
-  listUserMedia,
-  type MediaSort,
-  type SortDirection,
-} from "@/lib/services/media";
+import { listUserMedia, type MediaSort, type SortDirection } from "@/lib/services/media";
 import { externalMediaUrl } from "@/lib/providers/urls";
 import { isMediaStatus, isMediaType } from "@/lib/user-media";
 import type { MediaStatus } from "@/lib/types";
@@ -53,8 +49,7 @@ export default async function Home({
   const sort = sortKeys.has(params.sort as MediaSort)
     ? (params.sort as MediaSort)
     : DEFAULT_LIBRARY_SORT;
-  const direction: SortDirection =
-    params.dir === "asc" ? "asc" : DEFAULT_LIBRARY_DIRECTION;
+  const direction: SortDirection = params.dir === "asc" ? "asc" : DEFAULT_LIBRARY_DIRECTION;
   const visibleColumns = parseVisibleColumns(params.cols);
 
   const items = await listUserMedia(getDatabase().db, user.id, {
@@ -105,12 +100,7 @@ export default async function Home({
         items={items.map((item) => ({
           ...item,
           externalUrl:
-            item.externalUrl ||
-            externalMediaUrl(
-              item.source,
-              item.externalId,
-              item.externalSubId,
-            ),
+            item.externalUrl || externalMediaUrl(item.source, item.externalId, item.externalSubId),
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
         }))}

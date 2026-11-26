@@ -9,7 +9,8 @@ export async function snapshotDatabase(targetPath: string, sourcePath = database
   const source = resolve(sourcePath);
   const target = resolve(targetPath);
   if (source === target) throw new Error("Snapshot target must differ from database path");
-  if (sourcePath !== ":memory:" && !existsSync(source)) throw new Error(`SQLite source does not exist: ${source}`);
+  if (sourcePath !== ":memory:" && !existsSync(source))
+    throw new Error(`SQLite source does not exist: ${source}`);
   await mkdir(dirname(target), { recursive: true });
   await rm(target, { force: true });
   const { sqlite } = openDatabase(sourcePath);
@@ -47,7 +48,8 @@ export function assertHealthySqlite(path: string) {
   try {
     const row = sqlite.prepare("PRAGMA quick_check").get() as Record<string, unknown> | undefined;
     const result = row ? Object.values(row)[0] : null;
-    if (result !== "ok") throw new Error(`SQLite quick_check failed for ${path}: ${String(result ?? "no result")}`);
+    if (result !== "ok")
+      throw new Error(`SQLite quick_check failed for ${path}: ${String(result ?? "no result")}`);
   } finally {
     sqlite.close();
   }

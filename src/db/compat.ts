@@ -23,19 +23,34 @@ export function applySchemaCompatibility(db: DatabaseSync) {
   addColumnIfMissing(db, "user_media", "updated_at", "INTEGER NOT NULL DEFAULT 0");
   if (hasColumn(db, "user_media", "created_at"))
     db.prepare("UPDATE user_media SET updated_at = created_at WHERE updated_at = 0").run();
-  for (const column of ["runtime_minutes", "country_code", "episode_count", "page_count", "metadata_json", "created_at"])
+  for (const column of [
+    "runtime_minutes",
+    "country_code",
+    "episode_count",
+    "page_count",
+    "metadata_json",
+    "created_at",
+  ])
     dropColumnIfPresent(db, "media", column);
   dropColumnIfPresent(db, "user_media", "time_spent_override_minutes");
-  if (hasColumn(db, "user_media", "status") && hasColumn(db, "user_media", "progress_current") && hasColumn(db, "user_media", "progress_total")) {
+  if (
+    hasColumn(db, "user_media", "status") &&
+    hasColumn(db, "user_media", "progress_current") &&
+    hasColumn(db, "user_media", "progress_total")
+  ) {
     const result = db
-      .prepare("UPDATE user_media SET progress_current = progress_total WHERE status = 'COMPLETED' AND progress_total IS NOT NULL AND progress_current != progress_total")
+      .prepare(
+        "UPDATE user_media SET progress_current = progress_total WHERE status = 'COMPLETED' AND progress_total IS NOT NULL AND progress_current != progress_total",
+      )
       .run();
     if (result.changes) console.log(`Repaired ${result.changes} completed progress row(s).`);
   }
 }
 
 function hasTable(db: DatabaseSync, table: string) {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table));
+  return Boolean(
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table),
+  );
 }
 function columns(db: DatabaseSync, table: string) {
   return db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;

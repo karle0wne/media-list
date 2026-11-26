@@ -11,11 +11,16 @@ async function prepare(page: Page) {
   await mkdir(output, { recursive: true });
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
-  page.on("pageerror", error => pageErrors.push(error.message));
-  await page.route(/^https:\/\/(s4\.anilist\.co|covers\.openlibrary\.org|image\.tmdb\.org|media\.rawg\.io)\//, async route => {
-    await route.fulfill({ status: 200, contentType: "image/png", body: fakePng });
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
   });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.route(
+    /^https:\/\/(s4\.anilist\.co|covers\.openlibrary\.org|image\.tmdb\.org|media\.rawg\.io)\//,
+    async (route) => {
+      await route.fulfill({ status: 200, contentType: "image/png", body: fakePng });
+    },
+  );
   return { consoleErrors, pageErrors };
 }
 
@@ -25,7 +30,15 @@ async function capture(page: Page, name: string) {
 }
 
 async function proveRetiredAuthRoutes(page: Page) {
-  for (const path of ["/login", "/login/oidc", "/login/oidc/callback", "/login/magic?token=obsolete", "/register?token=obsolete", "/reset-password?token=obsolete", "/admin"]) {
+  for (const path of [
+    "/login",
+    "/login/oidc",
+    "/login/oidc/callback",
+    "/login/magic?token=obsolete",
+    "/register?token=obsolete",
+    "/reset-password?token=obsolete",
+    "/admin",
+  ]) {
     const response = await page.request.get(path, { maxRedirects: 0 });
     expect(response.status(), `${path} must not remain an app-owned auth route`).toBe(404);
   }
@@ -65,11 +78,19 @@ test("desktop library remains stable behind trusted gateway identity", async ({ 
   await page.getByRole("button", { name: "Grid view" }).click();
   const grid = page.locator(".libraryGrid");
   await expect(grid).toBeVisible();
-  expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(4);
+  expect(
+    await grid.evaluate(
+      (element) => getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(4);
   await capture(page, "library-grid-desktop");
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
-  await writeFile(`${output}/desktop-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
+  await writeFile(
+    `${output}/desktop-diagnostics.json`,
+    JSON.stringify(diagnostics, null, 2),
+    "utf8",
+  );
 });
 
 test("mobile library stays inside viewport behind trusted gateway identity", async ({ page }) => {
@@ -79,15 +100,31 @@ test("mobile library stays inside viewport behind trusted gateway identity", asy
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("link", { name: "+ Add media" })).toBeVisible();
   await expect(page.locator(".libraryTableWrap")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(1);
   await capture(page, "library-table-mobile");
   await page.getByRole("button", { name: "Grid view" }).click();
   const grid = page.locator(".libraryGrid");
   await expect(grid).toBeVisible();
-  expect(await grid.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(2);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  expect(
+    await grid.evaluate(
+      (element) => getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(2);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(1);
   await capture(page, "library-grid-mobile");
   expect(diagnostics.consoleErrors).toEqual([]);
   expect(diagnostics.pageErrors).toEqual([]);
-  await writeFile(`${output}/mobile-diagnostics.json`, JSON.stringify(diagnostics, null, 2), "utf8");
+  await writeFile(
+    `${output}/mobile-diagnostics.json`,
+    JSON.stringify(diagnostics, null, 2),
+    "utf8",
+  );
 });

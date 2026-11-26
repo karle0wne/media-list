@@ -6,5 +6,7 @@ import { refreshTmdbMetadata } from "../src/lib/operations/refresh-metadata";
 runCli(async () => {
   const cleanupResult = await cleanup();
   const metadataResult = await refreshTmdbMetadata();
-  console.log(`Maintenance complete: ${JSON.stringify({ cleanup: cleanupResult, metadata: metadataResult })}`);
+  console.log(
+    `Maintenance complete: ${JSON.stringify({ cleanup: cleanupResult, metadata: metadataResult })}`,
+  );
 });

@@ -27,26 +27,38 @@ function object(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function assertKnownFields(value: Record<string, unknown>, allowed: readonly string[], name: string) {
+function assertKnownFields(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  name: string,
+) {
   const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
-  if (unknown.length) throw new Error(`${name} contains unsupported fields: ${unknown.sort().join(", ")}`);
+  if (unknown.length)
+    throw new Error(`${name} contains unsupported fields: ${unknown.sort().join(", ")}`);
 }
 
 function optionalString(value: unknown, name: string) {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} must be a non-empty string`);
+  if (typeof value !== "string" || !value.trim())
+    throw new Error(`${name} must be a non-empty string`);
   return value.trim();
 }
 
 function optionalPositiveInteger(value: unknown, name: string, maximum?: number) {
   if (value === undefined) return undefined;
-  if (!Number.isInteger(value) || Number(value) < 1 || (maximum !== undefined && Number(value) > maximum)) {
+  if (
+    !Number.isInteger(value) ||
+    Number(value) < 1 ||
+    (maximum !== undefined && Number(value) > maximum)
+  ) {
     throw new Error(`${name} must be a positive integer${maximum ? ` <= ${maximum}` : ""}`);
   }
   return Number(value);
 }
 
-export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.trim() || DEFAULT_CONFIG_FILE): RuntimeConfig {
+export function loadRuntimeConfig(
+  path = process.env.MEDIA_LIST_CONFIG_FILE?.trim() || DEFAULT_CONFIG_FILE,
+): RuntimeConfig {
   if (!existsSync(path)) return {};
   const root = object(JSON.parse(readFileSync(path, "utf8")), "runtime config");
   assertKnownFields(root, ["databasePath", "tmdb", "backup"], "runtime config");
@@ -56,8 +68,15 @@ export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.tri
     const rawTmdb = object(root.tmdb, "runtime config.tmdb");
     assertKnownFields(rawTmdb, ["metadataTtlDays", "refreshLimit"], "runtime config.tmdb");
     tmdb = {
-      metadataTtlDays: optionalPositiveInteger(rawTmdb.metadataTtlDays, "runtime config.tmdb.metadataTtlDays"),
-      refreshLimit: optionalPositiveInteger(rawTmdb.refreshLimit, "runtime config.tmdb.refreshLimit", 500),
+      metadataTtlDays: optionalPositiveInteger(
+        rawTmdb.metadataTtlDays,
+        "runtime config.tmdb.metadataTtlDays",
+      ),
+      refreshLimit: optionalPositiveInteger(
+        rawTmdb.refreshLimit,
+        "runtime config.tmdb.refreshLimit",
+        500,
+      ),
     };
   }
 
@@ -67,7 +86,11 @@ export function loadRuntimeConfig(path = process.env.MEDIA_LIST_CONFIG_FILE?.tri
     assertKnownFields(rawBackup, ["s3"], "runtime config.backup");
     if (rawBackup.s3 !== undefined) {
       const rawS3 = object(rawBackup.s3, "runtime config.backup.s3");
-      assertKnownFields(rawS3, ["endpoint", "region", "bucket", "prefix"], "runtime config.backup.s3");
+      assertKnownFields(
+        rawS3,
+        ["endpoint", "region", "bucket", "prefix"],
+        "runtime config.backup.s3",
+      );
       backup = {
         s3: {
           endpoint: optionalString(rawS3.endpoint, "runtime config.backup.s3.endpoint"),
@@ -93,11 +116,17 @@ export function databasePathSetting(config = loadRuntimeConfig()) {
 }
 
 export function tmdbMetadataTtlDaysSetting(config = loadRuntimeConfig()) {
-  return Math.max(1, Number(process.env.TMDB_METADATA_TTL_DAYS || config.tmdb?.metadataTtlDays || 30));
+  return Math.max(
+    1,
+    Number(process.env.TMDB_METADATA_TTL_DAYS || config.tmdb?.metadataTtlDays || 30),
+  );
 }
 
 export function tmdbRefreshLimitSetting(config = loadRuntimeConfig()) {
-  return Math.max(1, Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || config.tmdb?.refreshLimit || 50)));
+  return Math.max(
+    1,
+    Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || config.tmdb?.refreshLimit || 50)),
+  );
 }
 
 export function s3EndpointSetting(config = loadRuntimeConfig()) {

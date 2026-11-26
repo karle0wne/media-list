@@ -20,24 +20,29 @@ runCli(async () => {
   await snapshotDatabase(snapshotPath);
   try {
     const body = await readFile(snapshotPath);
-    await client.send(new PutObjectCommand({
-      Bucket: config.bucket,
-      Key: backupKey,
-      Body: body,
-      ContentType: "application/vnd.sqlite3",
-    }));
+    await client.send(
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: backupKey,
+        Body: body,
+        ContentType: "application/vnd.sqlite3",
+      }),
+    );
 
     const state = openDatabase();
     try {
-      await state.db.insert(serviceState).values({
-        id: "global",
-        lastBackupAt: now,
-        lastBackupKey: backupKey,
-        updatedAt: now,
-      }).onConflictDoUpdate({
-        target: serviceState.id,
-        set: { lastBackupAt: now, lastBackupKey: backupKey, updatedAt: now },
-      });
+      await state.db
+        .insert(serviceState)
+        .values({
+          id: "global",
+          lastBackupAt: now,
+          lastBackupKey: backupKey,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: serviceState.id,
+          set: { lastBackupAt: now, lastBackupKey: backupKey, updatedAt: now },
+        });
     } finally {
       state.sqlite.close();
     }

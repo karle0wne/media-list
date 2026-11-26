@@ -1,4 +1,4 @@
-export const QUICK_IMPORT_PROMPT=`# Prepare a media-list quick import
+export const QUICK_IMPORT_PROMPT = `# Prepare a media-list quick import
 
 Use this prompt when one or more attached documents contain personal media lists in arbitrary formats such as Markdown, text, spreadsheets, PDFs, or Word documents. Read the supplied files and convert only the media identities into text that can be pasted directly into media-list Quick Import.
 
@@ -16,7 +16,7 @@ Return plain text only, with exactly one import item per line. Each line must be
 
 The result must be directly pasteable into media-list Quick Import without editing.`;
 
-export const CANONICAL_CSV_HELP=`Canonical CSV is the strict round-trip format for media-list. Use it when you already have exact provider identities and want to preserve user state such as status, score, progress, or notes.
+export const CANONICAL_CSV_HELP = `Canonical CSV is the strict round-trip format for media-list. Use it when you already have exact provider identities and want to preserve user state such as status, score, progress, or notes.
 
 Required identity columns:
 external_source, external_id, external_sub_id, type, title

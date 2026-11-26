@@ -6,9 +6,149 @@ import { parseCandidateKey, resolveExternalUrl, searchAllProviders } from "../pr
 import type { ImportedUserData, MediaCandidate } from "../types";
 import { resolveAndAddMedia } from "./media";
 
-export async function createQuickImport(db:AppDb,userId:string,text:string){const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,50);if(!lines.length)throw new Error("Paste at least one title or provider URL");return createBatch(db,userId,lines.map(raw=>({raw,userData:{}})));}
-async function createBatch(db:AppDb,userId:string,items:Array<{raw:string;userData:ImportedUserData}>){const batchId=randomUUID();await db.insert(importBatches).values({id:batchId,userId,kind:"QUICK",createdAt:new Date()});const resolved=await mapLimited(items,3,async item=>{try{const candidates=/^https?:\/\//i.test(item.raw)?await resolveExternalUrl(item.raw):await searchAllProviders(item.raw);return{item,candidates,error:null};}catch(error){return{item,candidates:[] as MediaCandidate[],error:error instanceof Error?error.message:"resolver failed"};}});await db.insert(importRows).values(resolved.map(result=>({id:randomUUID(),batchId,rawInput:result.item.raw,userDataJson:JSON.stringify(result.item.userData),candidatesJson:JSON.stringify(result.candidates),state:result.error?("ERROR" as const):("PENDING" as const),errorMessage:result.error,createdAt:new Date()})));return batchId;}
-export async function getBatch(db:AppDb,userId:string,batchId:string){const batch=(await db.select().from(importBatches).where(and(eq(importBatches.id,batchId),eq(importBatches.userId,userId))).limit(1))[0];if(!batch)return null;const rows=await db.select().from(importRows).where(eq(importRows.batchId,batchId));return{batch,rows:rows.map(row=>({...row,candidates:safeJson<MediaCandidate[]>(row.candidatesJson,[]),userData:safeJson<ImportedUserData>(row.userDataJson,{})}))};}
-export async function confirmBatch(db:AppDb,userId:string,batchId:string,selections:Record<string,string>){const data=await getBatch(db,userId,batchId);if(!data)throw new Error("Import batch not found");const report={imported:0,skipped:0,invalid:0};for(const row of data.rows){const selected=selections[row.id];if(!selected){report.skipped+=1;await db.update(importRows).set({state:"SKIPPED"}).where(eq(importRows.id,row.id));continue;}const parsed=parseCandidateKey(selected);const preview=row.candidates.find(candidate=>candidate.key===selected);if(!parsed||!preview){report.invalid+=1;await db.update(importRows).set({state:"ERROR",errorMessage:"Selected candidate was not in staging data"}).where(eq(importRows.id,row.id));continue;}try{const result=await resolveAndAddMedia(db,userId,{...parsed,type:preview.type},row.userData);await db.update(importRows).set({state:"CONFIRMED",selectedCandidateKey:selected,errorMessage:null}).where(eq(importRows.id,row.id));if(result.inserted)report.imported+=1;else report.skipped+=1;}catch(error){report.invalid+=1;await db.update(importRows).set({state:"ERROR",errorMessage:error instanceof Error?error.message:"Provider validation failed"}).where(eq(importRows.id,row.id));}}return report;}
-function safeJson<T>(value:string|null,fallback:T):T{if(!value)return fallback;try{return JSON.parse(value)as T;}catch{return fallback;}}
-async function mapLimited<T,R>(items:T[],limit:number,fn:(item:T)=>Promise<R>):Promise<R[]>{const output=new Array<R>(items.length);let next=0;async function worker(){while(true){const index=next++;if(index>=items.length)return;output[index]=await fn(items[index]);}}await Promise.all(Array.from({length:Math.min(limit,items.length)},worker));return output;}
+export async function createQuickImport(db: AppDb, userId: string, text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+  if (!lines.length) throw new Error("Paste at least one title or provider URL");
+  return createBatch(
+    db,
+    userId,
+    lines.map((raw) => ({ raw, userData: {} })),
+  );
+}
+async function createBatch(
+  db: AppDb,
+  userId: string,
+  items: Array<{ raw: string; userData: ImportedUserData }>,
+) {
+  const batchId = randomUUID();
+  await db
+    .insert(importBatches)
+    .values({ id: batchId, userId, kind: "QUICK", createdAt: new Date() });
+  const resolved = await mapLimited(items, 3, async (item) => {
+    try {
+      const candidates = /^https?:\/\//i.test(item.raw)
+        ? await resolveExternalUrl(item.raw)
+        : await searchAllProviders(item.raw);
+      return { item, candidates, error: null };
+    } catch (error) {
+      return {
+        item,
+        candidates: [] as MediaCandidate[],
+        error: error instanceof Error ? error.message : "resolver failed",
+      };
+    }
+  });
+  await db.insert(importRows).values(
+    resolved.map((result) => ({
+      id: randomUUID(),
+      batchId,
+      rawInput: result.item.raw,
+      userDataJson: JSON.stringify(result.item.userData),
+      candidatesJson: JSON.stringify(result.candidates),
+      state: result.error ? ("ERROR" as const) : ("PENDING" as const),
+      errorMessage: result.error,
+      createdAt: new Date(),
+    })),
+  );
+  return batchId;
+}
+export async function getBatch(db: AppDb, userId: string, batchId: string) {
+  const batch = (
+    await db
+      .select()
+      .from(importBatches)
+      .where(and(eq(importBatches.id, batchId), eq(importBatches.userId, userId)))
+      .limit(1)
+  )[0];
+  if (!batch) return null;
+  const rows = await db.select().from(importRows).where(eq(importRows.batchId, batchId));
+  return {
+    batch,
+    rows: rows.map((row) => ({
+      ...row,
+      candidates: safeJson<MediaCandidate[]>(row.candidatesJson, []),
+      userData: safeJson<ImportedUserData>(row.userDataJson, {}),
+    })),
+  };
+}
+export async function confirmBatch(
+  db: AppDb,
+  userId: string,
+  batchId: string,
+  selections: Record<string, string>,
+) {
+  const data = await getBatch(db, userId, batchId);
+  if (!data) throw new Error("Import batch not found");
+  const report = { imported: 0, skipped: 0, invalid: 0 };
+  for (const row of data.rows) {
+    const selected = selections[row.id];
+    if (!selected) {
+      report.skipped += 1;
+      await db.update(importRows).set({ state: "SKIPPED" }).where(eq(importRows.id, row.id));
+      continue;
+    }
+    const parsed = parseCandidateKey(selected);
+    const preview = row.candidates.find((candidate) => candidate.key === selected);
+    if (!parsed || !preview) {
+      report.invalid += 1;
+      await db
+        .update(importRows)
+        .set({ state: "ERROR", errorMessage: "Selected candidate was not in staging data" })
+        .where(eq(importRows.id, row.id));
+      continue;
+    }
+    try {
+      const result = await resolveAndAddMedia(
+        db,
+        userId,
+        { ...parsed, type: preview.type },
+        row.userData,
+      );
+      await db
+        .update(importRows)
+        .set({ state: "CONFIRMED", selectedCandidateKey: selected, errorMessage: null })
+        .where(eq(importRows.id, row.id));
+      if (result.inserted) report.imported += 1;
+      else report.skipped += 1;
+    } catch (error) {
+      report.invalid += 1;
+      await db
+        .update(importRows)
+        .set({
+          state: "ERROR",
+          errorMessage: error instanceof Error ? error.message : "Provider validation failed",
+        })
+        .where(eq(importRows.id, row.id));
+    }
+  }
+  return report;
+}
+function safeJson<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+async function mapLimited<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const output = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      output[index] = await fn(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return output;
+}

@@ -9,7 +9,10 @@ const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 export function openTestDatabase() {
   const bundle = openDatabase(":memory:");
-  for (const dir of readdirSync(drizzleDir, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
+  for (const dir of readdirSync(drizzleDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()) {
     bundle.sqlite.exec(readFileSync(join(drizzleDir, dir, "migration.sql"), "utf8"));
   }
   applySchemaCompatibility(bundle.sqlite);

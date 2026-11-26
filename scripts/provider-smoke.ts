@@ -13,7 +13,8 @@ async function main() {
     ["AniList", () => searchAniList("Naruto", 2)],
     ["Open Library", () => searchOpenLibrary("The Hobbit", 2)],
   ];
-  if (process.env.TMDB_API_TOKEN?.trim()) checks.push(["TMDB", () => searchTmdbMovies("The Matrix", 2)]);
+  if (process.env.TMDB_API_TOKEN?.trim())
+    checks.push(["TMDB", () => searchTmdbMovies("The Matrix", 2)]);
   if (rawgConfigured()) checks.push(["RAWG", () => searchRawgGames("post", 5)]);
 
   let failed = false;

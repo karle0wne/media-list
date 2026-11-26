@@ -3,14 +3,24 @@ import assert from "node:assert/strict";
 import { ProviderCover, normalizeProviderCoverUrl } from "../src/components/provider-cover";
 
 test("provider covers bypass the server image optimizer and right-size stored TMDB posters", () => {
-  const element = ProviderCover({ src: "https://image.tmdb.org/t/p/w500/poster.jpg", width: 84, height: 118 });
+  const element = ProviderCover({
+    src: "https://image.tmdb.org/t/p/w500/poster.jpg",
+    width: 84,
+    height: 118,
+  });
   assert.equal(element.props.src, "https://image.tmdb.org/t/p/w185/poster.jpg");
   assert.equal(element.props.unoptimized, true);
 });
 
 test("stored TMDB poster variants normalize to w185", () => {
-  assert.equal(normalizeProviderCoverUrl("https://image.tmdb.org/t/p/original/nested/poster.jpg"), "https://image.tmdb.org/t/p/w185/nested/poster.jpg");
-  assert.equal(normalizeProviderCoverUrl("https://image.tmdb.org/t/p/w92/poster.jpg"), "https://image.tmdb.org/t/p/w185/poster.jpg");
+  assert.equal(
+    normalizeProviderCoverUrl("https://image.tmdb.org/t/p/original/nested/poster.jpg"),
+    "https://image.tmdb.org/t/p/w185/nested/poster.jpg",
+  );
+  assert.equal(
+    normalizeProviderCoverUrl("https://image.tmdb.org/t/p/w92/poster.jpg"),
+    "https://image.tmdb.org/t/p/w185/poster.jpg",
+  );
 });
 
 test("RAWG covers are resized while unrelated providers and unknown paths stay untouched", () => {
@@ -18,6 +28,9 @@ test("RAWG covers are resized while unrelated providers and unknown paths stay u
   const rawg = "https://media.rawg.io/media/games/example.jpg";
   const unknownTmdb = "https://image.tmdb.org/not-a-poster/example.jpg";
   assert.equal(normalizeProviderCoverUrl(anilist), anilist);
-  assert.equal(normalizeProviderCoverUrl(rawg), "https://media.rawg.io/media/resize/200/-/games/example.jpg");
+  assert.equal(
+    normalizeProviderCoverUrl(rawg),
+    "https://media.rawg.io/media/resize/200/-/games/example.jpg",
+  );
   assert.equal(normalizeProviderCoverUrl(unknownTmdb), unknownTmdb);
 });

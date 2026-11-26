@@ -20,7 +20,9 @@ export async function requireIdentity() {
 }
 
 export async function resolveTrustedIdentity(db: AppDb, identity: TrustedIdentity) {
-  const bySubject = (await db.select().from(users).where(eq(users.externalSubject, identity.subject)).limit(1))[0];
+  const bySubject = (
+    await db.select().from(users).where(eq(users.externalSubject, identity.subject)).limit(1)
+  )[0];
   if (bySubject) {
     await synchronizeIdentity(db, bySubject.id, identity);
     return { id: bySubject.id, username: identity.name };
@@ -28,7 +30,9 @@ export async function resolveTrustedIdentity(db: AppDb, identity: TrustedIdentit
 
   // Existing production data can be linked once by the unique verified email that
   // the trusted gateway supplies. This is data ownership migration, not access logic.
-  const byEmail = (await db.select().from(users).where(eq(users.email, identity.email)).limit(1))[0];
+  const byEmail = (
+    await db.select().from(users).where(eq(users.email, identity.email)).limit(1)
+  )[0];
   if (byEmail) {
     await synchronizeIdentity(db, byEmail.id, identity);
     return { id: byEmail.id, username: identity.name };
@@ -47,16 +51,24 @@ export async function resolveTrustedIdentity(db: AppDb, identity: TrustedIdentit
 }
 
 async function synchronizeIdentity(db: AppDb, userId: string, identity: TrustedIdentity) {
-  const emailOwner = (await db.select({ id: users.id }).from(users).where(eq(users.email, identity.email)).limit(1))[0];
-  if (emailOwner && emailOwner.id !== userId) throw new Error("Trusted identity email is already linked to another data owner");
-  await db.update(users).set({ externalSubject: identity.subject, email: identity.email, username: identity.name }).where(eq(users.id, userId));
+  const emailOwner = (
+    await db.select({ id: users.id }).from(users).where(eq(users.email, identity.email)).limit(1)
+  )[0];
+  if (emailOwner && emailOwner.id !== userId)
+    throw new Error("Trusted identity email is already linked to another data owner");
+  await db
+    .update(users)
+    .set({ externalSubject: identity.subject, email: identity.email, username: identity.name })
+    .where(eq(users.id, userId));
 }
 
 async function uniqueUsername(db: AppDb, preferred: string) {
   for (let index = 0; index < 100; index++) {
     const suffix = index === 0 ? "" : `-${index + 1}`;
     const candidate = `${preferred.slice(0, 32 - suffix.length)}${suffix}`;
-    const existing = (await db.select({ id: users.id }).from(users).where(eq(users.username, candidate)).limit(1))[0];
+    const existing = (
+      await db.select({ id: users.id }).from(users).where(eq(users.username, candidate)).limit(1)
+    )[0];
     if (!existing) return candidate;
   }
   return `user-${randomUUID().slice(0, 8)}`;
@@ -64,17 +76,23 @@ async function uniqueUsername(db: AppDb, preferred: string) {
 
 function requiredHeader(value: string | null, name: string, max: number) {
   const clean = value?.trim() ?? "";
-  if (!clean || clean.length > max || /[\r\n]/.test(clean)) throw new Error(`Missing or invalid trusted identity header ${name}`);
+  if (!clean || clean.length > max || /[\r\n]/.test(clean))
+    throw new Error(`Missing or invalid trusted identity header ${name}`);
   return clean;
 }
 
 function normalizeEmail(value: string) {
   const clean = value.toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) throw new Error("Trusted identity has invalid email");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean))
+    throw new Error("Trusted identity has invalid email");
   return clean;
 }
 
 function sanitizeUsername(value: string) {
-  const clean = value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+  const clean = value
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
   return clean.length >= 3 ? clean : `user-${randomUUID().slice(0, 8)}`;
 }

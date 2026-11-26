@@ -52,20 +52,12 @@ export function LibraryGrid({ items }: { items: LibraryRow[] }) {
               </div>
 
               <div className="mediaGridMetrics">
-                <span className={`gridStatusBadge ${statusClass(item.status)}`}>
-                  {status}
-                </span>
-                <span className="gridScore">
-                  {item.score == null ? "—" : `★ ${item.score}/10`}
-                </span>
+                <span className={`gridStatusBadge ${statusClass(item.status)}`}>{status}</span>
+                <span className="gridScore">{item.score == null ? "—" : `★ ${item.score}/10`}</span>
               </div>
 
               <div className="mediaGridProgress">{progress ?? "\u00a0"}</div>
-              <time
-                className="mediaGridUpdated"
-                dateTime={item.updatedAt}
-                title={item.updatedAt}
-              >
+              <time className="mediaGridUpdated" dateTime={item.updatedAt} title={item.updatedAt}>
                 Updated {formatDate(item.updatedAt)}
               </time>
             </div>

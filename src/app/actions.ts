@@ -5,7 +5,12 @@ import { getDatabase } from "@/db";
 import { requireIdentity } from "@/lib/identity";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import { parseCandidateKey, resolveExact } from "@/lib/providers";
-import { addSelectedMediaToUser, deleteUserMediaMany, retryMediaMetadata, updateUserMedia } from "@/lib/services/media";
+import {
+  addSelectedMediaToUser,
+  deleteUserMediaMany,
+  retryMediaMetadata,
+  updateUserMedia,
+} from "@/lib/services/media";
 import { updateUserProgress } from "@/lib/services/progress";
 import { createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
@@ -45,7 +50,8 @@ export async function addCandidateAction(form: FormData) {
 export async function retryMetadataAction(form: FormData) {
   const user = await requireIdentity();
   const mediaId = str(form, "mediaId");
-  if (await retryMediaMetadata(getDatabase().db, user.id, mediaId)) scheduleMediaEnrichment(mediaId);
+  if (await retryMediaMetadata(getDatabase().db, user.id, mediaId))
+    scheduleMediaEnrichment(mediaId);
   redirect(returnTo(form));
 }
 
@@ -74,7 +80,8 @@ export async function quickScoreAction(form: FormData) {
 export async function quickProgressAction(form: FormData) {
   const user = await requireIdentity();
   try {
-    const progressCurrent = parseOptionalNonNegativeInteger(str(form, "progressCurrent"), "progress_current") ?? 0;
+    const progressCurrent =
+      parseOptionalNonNegativeInteger(str(form, "progressCurrent"), "progress_current") ?? 0;
     await updateUserProgress(getDatabase().db, user.id, str(form, "id"), progressCurrent);
   } catch (error) {
     goError(returnTo(form), error);
@@ -85,7 +92,9 @@ export async function quickProgressAction(form: FormData) {
 export async function quickNotesAction(form: FormData) {
   const user = await requireIdentity();
   try {
-    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), { notes: str(form, "notes") || null });
+    await updateUserMedia(getDatabase().db, user.id, str(form, "id"), {
+      notes: str(form, "notes") || null,
+    });
   } catch (error) {
     goError(returnTo(form), error);
   }
@@ -129,7 +138,10 @@ export async function confirmImportAction(form: FormData) {
   const user = await requireIdentity();
   const batchId = str(form, "batchId");
   const selections: Record<string, string> = {};
-  for (const [key, value] of form.entries()) if (key.startsWith("row:") && typeof value === "string") selections[key.slice(4)] = value;
+  for (const [key, value] of form.entries())
+    if (key.startsWith("row:") && typeof value === "string") selections[key.slice(4)] = value;
   const report = await confirmBatch(getDatabase().db, user.id, batchId, selections);
-  redirect(`/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}`)}`);
+  redirect(
+    `/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}`)}`,
+  );
 }
