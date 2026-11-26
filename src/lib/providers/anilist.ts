@@ -1,5 +1,10 @@
 import type { MediaCandidate } from "../types";
-import { providerFetch, providerResponseError } from "./http";
+import {
+  nullIfNotFound,
+  ProviderNotFoundError,
+  providerFetch,
+  providerResponseError,
+} from "./http";
 const ENDPOINT = "https://graphql.anilist.co";
 const fields = `
   id
@@ -26,6 +31,7 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
     body: JSON.stringify({ query, variables }),
     cache: "no-store",
   });
+  if (response.status === 404) throw new ProviderNotFoundError("AniList");
   if (!response.ok) throw providerResponseError("AniList", response);
   const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
   if (body.errors?.length) throw new Error(body.errors.map((e) => e.message).join("; "));
@@ -66,18 +72,22 @@ export async function searchAniList(query: string, limit = 5): Promise<MediaCand
 export async function getAniListById(id: string): Promise<MediaCandidate | null> {
   const numeric = Number(id);
   if (!Number.isInteger(numeric)) return null;
-  const data = await gql<{ Media: AniMedia | null }>(
-    `query ($id: Int!) { Media(id: $id, type: ANIME) { ${fields} } }`,
-    { id: numeric },
+  const data = await nullIfNotFound(() =>
+    gql<{ Media: AniMedia | null }>(
+      `query ($id: Int!) { Media(id: $id, type: ANIME) { ${fields} } }`,
+      { id: numeric },
+    ),
   );
-  return data.Media ? toCandidate(data.Media) : null;
+  return data?.Media ? toCandidate(data.Media) : null;
 }
 export async function getAniListByMalId(id: string): Promise<MediaCandidate | null> {
   const numeric = Number(id);
   if (!Number.isInteger(numeric)) return null;
-  const data = await gql<{ Media: AniMedia | null }>(
-    `query ($idMal: Int!) { Media(idMal: $idMal, type: ANIME) { ${fields} } }`,
-    { idMal: numeric },
+  const data = await nullIfNotFound(() =>
+    gql<{ Media: AniMedia | null }>(
+      `query ($idMal: Int!) { Media(idMal: $idMal, type: ANIME) { ${fields} } }`,
+      { idMal: numeric },
+    ),
   );
-  return data.Media ? toCandidate(data.Media) : null;
+  return data?.Media ? toCandidate(data.Media) : null;
 }

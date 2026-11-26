@@ -1,5 +1,10 @@
 import type { MediaCandidate } from "../types";
-import { providerFetch, providerResponseError } from "./http";
+import {
+  nullIfNotFound,
+  ProviderNotFoundError,
+  providerFetch,
+  providerResponseError,
+} from "./http";
 
 const API = "https://api.rawg.io/api";
 const COVER_HOST = "media.rawg.io";
@@ -24,12 +29,8 @@ export async function searchRawgGames(query: string, limit = 10): Promise<MediaC
 }
 export async function getRawgGame(idOrSlug: string): Promise<MediaCandidate | null> {
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(idOrSlug)) return null;
-  try {
-    return candidate(await rawg<RawgGame>(`/games/${idOrSlug}`));
-  } catch (error) {
-    if (error instanceof RawgNotFoundError) return null;
-    throw error;
-  }
+  const game = await nullIfNotFound(() => rawg<RawgGame>(`/games/${idOrSlug}`));
+  return game ? candidate(game) : null;
 }
 async function rawg<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const key = process.env.RAWG_API_KEY?.trim();
@@ -41,11 +42,10 @@ async function rawg<T>(path: string, params: Record<string, string> = {}): Promi
     headers: { accept: "application/json" },
     cache: "no-store",
   });
-  if (response.status === 404) throw new RawgNotFoundError();
+  if (response.status === 404) throw new ProviderNotFoundError("RAWG");
   if (!response.ok) throw providerResponseError("RAWG", response);
   return response.json() as Promise<T>;
 }
-class RawgNotFoundError extends Error {}
 function candidate(item: RawgGame): MediaCandidate {
   return {
     key: `RAWG:${item.id}:`,

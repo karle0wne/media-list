@@ -11,6 +11,27 @@ export class ProviderResponseError extends Error {
   }
 }
 
+/**
+ * The provider answered authoritatively that the item does not exist. This is the only failure
+ * that exact lookups may turn into `null`; rate limits, outages and timeouts must propagate so
+ * callers can show a retry-later state instead of "not found".
+ */
+export class ProviderNotFoundError extends Error {
+  constructor(public readonly provider: string) {
+    super(`${provider} item not found`);
+    this.name = "ProviderNotFoundError";
+  }
+}
+
+export async function nullIfNotFound<T>(operation: () => Promise<T>): Promise<T | null> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProviderNotFoundError) return null;
+    throw error;
+  }
+}
+
 export async function providerFetch(
   input: string | URL | Request,
   init: RequestInit = {},

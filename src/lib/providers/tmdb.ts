@@ -1,5 +1,10 @@
 import type { MediaCandidate } from "../types";
-import { providerFetch, providerResponseError } from "./http";
+import {
+  nullIfNotFound,
+  ProviderNotFoundError,
+  providerFetch,
+  providerResponseError,
+} from "./http";
 const API = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/w185";
 function token() {
@@ -14,7 +19,7 @@ async function tmdb<T>(path: string, params?: Record<string, string>): Promise<T
     headers: { Authorization: `Bearer ${apiToken}`, accept: "application/json" },
     cache: "no-store",
   });
-  if (response.status === 404) throw new Error("TMDB item not found");
+  if (response.status === 404) throw new ProviderNotFoundError("TMDB");
   if (!response.ok) throw providerResponseError("TMDB", response);
   return (await response.json()) as T;
 }
@@ -87,29 +92,27 @@ export async function searchTmdb(query: string, limit = 4): Promise<MediaCandida
     searchTmdbMovies(query, limit),
     searchTmdbShows(query, limit),
   ]);
-  const showDetails = await Promise.all(
-    shows
-      .slice(0, Math.min(3, limit))
-      .map((show) => tmdb<TvDetails>(`/tv/${show.externalId}`, { language: "en-US" })),
-  );
+  // One unavailable show must not hide the movies and the other shows from the results.
+  const showDetails = (
+    await Promise.allSettled(
+      shows
+        .slice(0, Math.min(3, limit))
+        .map((show) => tmdb<TvDetails>(`/tv/${show.externalId}`, { language: "en-US" })),
+    )
+  ).flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
   return [...movies, ...showDetails.flatMap((show) => seasonCandidates(show, 12))].slice(0, 12);
 }
 export async function getTmdbShowSeasons(seriesId: string): Promise<MediaCandidate[]> {
   if (!token() || !/^\d+$/.test(seriesId)) return [];
-  try {
-    return seasonCandidates(await tmdb<TvDetails>(`/tv/${seriesId}`, { language: "en-US" }), 30);
-  } catch {
-    return [];
-  }
+  const show = await nullIfNotFound(() =>
+    tmdb<TvDetails>(`/tv/${seriesId}`, { language: "en-US" }),
+  );
+  return show ? seasonCandidates(show, 30) : [];
 }
 export async function getTmdbMovie(id: string): Promise<MediaCandidate | null> {
   if (!token() || !/^\d+$/.test(id)) return null;
-  try {
-    const item = await tmdb<MovieSearch>(`/movie/${id}`, { language: "en-US" });
-    return movieSearchCandidate(item);
-  } catch {
-    return null;
-  }
+  const item = await nullIfNotFound(() => tmdb<MovieSearch>(`/movie/${id}`, { language: "en-US" }));
+  return item ? movieSearchCandidate(item) : null;
 }
 export async function getTmdbSeason(
   seriesId: string,
@@ -118,16 +121,15 @@ export async function getTmdbSeason(
   if (!token() || !/^\d+$/.test(seriesId)) return null;
   const match = /^season:(\d+)$/.exec(subId);
   if (!match) return null;
-  try {
-    const show = await tmdb<TvDetails>(`/tv/${seriesId}`, { language: "en-US" });
-    return (
-      seasonCandidates(show, 100).find(
-        (candidate) => candidate.externalSubId === `season:${Number(match[1])}`,
-      ) ?? null
-    );
-  } catch {
-    return null;
-  }
+  const show = await nullIfNotFound(() =>
+    tmdb<TvDetails>(`/tv/${seriesId}`, { language: "en-US" }),
+  );
+  if (!show) return null;
+  return (
+    seasonCandidates(show, 100).find(
+      (candidate) => candidate.externalSubId === `season:${Number(match[1])}`,
+    ) ?? null
+  );
 }
 export async function findTmdbByImdb(imdbId: string) {
   if (!token()) return [];
