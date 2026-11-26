@@ -79,3 +79,30 @@ env.list
 .DS_Store
 .env
 data/
+
+# Node / Next.js
+node_modules/
+.next/
+*.tsbuildinfo
+npm-debug.log*
+
+# Environment (the example file is the only tracked one)
+.env.*
+!.env.example
+
+# Local data, backups and exports never belong in Git
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+backups/
+media-list-*.csv
+media-list-*.md
+
+# Test and UI proof output
+coverage/
+playwright-report/
+test-results/
+ui-proof/

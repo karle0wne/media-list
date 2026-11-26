@@ -1,0 +1,11 @@
+.next/
+node_modules/
+data/
+public/
+drizzle/
+package-lock.json
+next-env.d.ts
+playwright-report/
+test-results/
+ui-proof/
+coverage/
