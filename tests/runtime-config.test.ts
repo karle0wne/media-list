@@ -88,3 +88,20 @@ test("unknown or invalid application config fails closed", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("malformed tuning variables fail closed instead of becoming NaN", () => {
+  for (const value of ["abc", "0", "-3", "1.5", "501"]) {
+    withEnv("TMDB_REFRESH_LIMIT", value, () => {
+      assert.throws(() => tmdbRefreshLimitSetting({}), /TMDB_REFRESH_LIMIT must be a positive/);
+    });
+  }
+  withEnv("TMDB_METADATA_TTL_DAYS", "soon", () => {
+    assert.throws(() => tmdbMetadataTtlDaysSetting({}), /TMDB_METADATA_TTL_DAYS/);
+  });
+  withEnv("TMDB_REFRESH_LIMIT", "  ", () => {
+    assert.equal(tmdbRefreshLimitSetting({}), 50);
+  });
+  withEnv("TMDB_METADATA_TTL_DAYS", undefined, () => {
+    assert.equal(tmdbMetadataTtlDaysSetting({}), 30);
+  });
+});

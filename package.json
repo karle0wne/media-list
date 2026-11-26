@@ -25,24 +25,24 @@
     "metadata:refresh": "tsx scripts/refresh-metadata.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "latest",
-    "dotenv": "latest",
-    "drizzle-kit": "rc",
-    "drizzle-orm": "rc",
+    "@aws-sdk/client-s3": "^3.1123.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "1.0.0-rc.4",
+    "drizzle-orm": "1.0.0-rc.4",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tsx": "latest"
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
-    "@playwright/test": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.4",
     "prettier": "^3.10.1",
-    "typescript": "latest"
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=24.15.0 <25"

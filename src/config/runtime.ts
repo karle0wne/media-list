@@ -115,18 +115,22 @@ export function databasePathSetting(config = loadRuntimeConfig()) {
   return process.env.DATABASE_PATH || config.databasePath || "./data/media-list.db";
 }
 
+/** An unset or blank variable falls through to the config file; a malformed one fails closed. */
+function envPositiveInteger(name: string, maximum?: number) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || (maximum !== undefined && value > maximum))
+    throw new Error(`${name} must be a positive integer${maximum ? ` <= ${maximum}` : ""}`);
+  return value;
+}
+
 export function tmdbMetadataTtlDaysSetting(config = loadRuntimeConfig()) {
-  return Math.max(
-    1,
-    Number(process.env.TMDB_METADATA_TTL_DAYS || config.tmdb?.metadataTtlDays || 30),
-  );
+  return envPositiveInteger("TMDB_METADATA_TTL_DAYS") ?? config.tmdb?.metadataTtlDays ?? 30;
 }
 
 export function tmdbRefreshLimitSetting(config = loadRuntimeConfig()) {
-  return Math.max(
-    1,
-    Math.min(500, Number(process.env.TMDB_REFRESH_LIMIT || config.tmdb?.refreshLimit || 50)),
-  );
+  return envPositiveInteger("TMDB_REFRESH_LIMIT", 500) ?? config.tmdb?.refreshLimit ?? 50;
 }
 
 export function s3EndpointSetting(config = loadRuntimeConfig()) {
