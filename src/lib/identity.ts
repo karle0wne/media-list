@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { getDatabase, type AppDb } from "@/db";
 import { users } from "@/db/schema";
+import { GatewayAuthError, assertGatewayRequest, type HeaderSource } from "./gateway-auth";
 
 export type TrustedIdentity = {
   subject: string;
@@ -15,20 +16,43 @@ export type DataOwner = { id: string; username: string };
 
 type UserRow = typeof users.$inferSelect;
 
+/**
+ * Reads the identity the trusted gateway forwarded. Pure so every rule is testable without a
+ * request: the gateway secret is checked first, then each identity header is validated.
+ */
+export function identityFromHeaders(headers: HeaderSource): TrustedIdentity {
+  assertGatewayRequest(headers);
+  const subject = requiredHeader(headers.get("x-auth-subject"), "X-Auth-Subject", 512);
+  return {
+    subject,
+    email: normalizeEmail(requiredHeader(headers.get("x-auth-email"), "X-Auth-Email", 254)),
+    name: sanitizeUsername(requiredHeader(headers.get("x-auth-name"), "X-Auth-Name", 128), subject),
+  };
+}
+
 // Resolved once per server render: the layout and the page both ask for the identity, and
 // they run concurrently on a user's very first visit.
 export const requireIdentity = cache(async (): Promise<DataOwner> => {
-  const requestHeaders = await headers();
-  const subject = requiredHeader(requestHeaders.get("x-auth-subject"), "X-Auth-Subject", 512);
-  return resolveTrustedIdentity(getDatabase().db, {
-    subject,
-    email: normalizeEmail(requiredHeader(requestHeaders.get("x-auth-email"), "X-Auth-Email", 254)),
-    name: sanitizeUsername(
-      requiredHeader(requestHeaders.get("x-auth-name"), "X-Auth-Name", 128),
-      subject,
-    ),
-  });
+  return resolveTrustedIdentity(getDatabase().db, identityFromHeaders(await headers()));
 });
+
+/** API routes answer 401 instead of an error page when the gateway credentials are missing. */
+export function withIdentity(handler: (user: DataOwner) => Promise<Response>) {
+  return async () => {
+    let user: DataOwner;
+    try {
+      user = await requireIdentity();
+    } catch (error) {
+      if (error instanceof GatewayAuthError)
+        return new Response("Unauthorized", {
+          status: 401,
+          headers: { "cache-control": "no-store" },
+        });
+      throw error;
+    }
+    return handler(user);
+  };
+}
 
 /**
  * Maps the gateway identity to a local data owner. `username` is only a unique display label
@@ -106,14 +130,14 @@ async function uniqueUsername(db: AppDb, preferred: string) {
 function requiredHeader(value: string | null, name: string, max: number) {
   const clean = value?.trim() ?? "";
   if (!clean || clean.length > max || /[\r\n]/.test(clean))
-    throw new Error(`Missing or invalid trusted identity header ${name}`);
+    throw new GatewayAuthError(`Missing or invalid trusted identity header ${name}`);
   return clean;
 }
 
 function normalizeEmail(value: string) {
   const clean = value.toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean))
-    throw new Error("Trusted identity has invalid email");
+    throw new GatewayAuthError("Trusted identity has invalid email");
   return clean;
 }
 

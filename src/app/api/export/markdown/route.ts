@@ -1,8 +1,7 @@
-import { requireIdentity } from "@/lib/identity";
+import { withIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { exportMarkdown } from "@/lib/services/markdown";
-export async function GET() {
-  const user = await requireIdentity();
+export const GET = withIdentity(async (user) => {
   const markdown = await exportMarkdown(getDatabase().db, user.id);
   return new Response(markdown, {
     headers: {
@@ -11,4 +10,4 @@ export async function GET() {
       "cache-control": "no-store",
     },
   });
-}
+});

@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  backupKeepVersionsSetting,
   databasePathSetting,
+  enrichmentRecoveryIntervalSecondsSetting,
   loadRuntimeConfig,
   s3BucketSetting,
   s3EndpointSetting,
@@ -104,4 +106,37 @@ test("malformed tuning variables fail closed instead of becoming NaN", () => {
   withEnv("TMDB_METADATA_TTL_DAYS", undefined, () => {
     assert.equal(tmdbMetadataTtlDaysSetting({}), 30);
   });
+});
+
+test("backup retention and the recovery interval have defaults, config values and strict overrides", () => {
+  withEnv("BACKUP_KEEP_VERSIONS", undefined, () => {
+    assert.equal(backupKeepVersionsSetting({}), 30);
+    assert.equal(backupKeepVersionsSetting({ backup: { keepVersions: 7 } }), 7);
+  });
+  withEnv("BACKUP_KEEP_VERSIONS", "14", () => assert.equal(backupKeepVersionsSetting({}), 14));
+  for (const bad of ["0", "-1", "abc", "1.5", "1001"])
+    withEnv("BACKUP_KEEP_VERSIONS", bad, () =>
+      assert.throws(() => backupKeepVersionsSetting({}), /BACKUP_KEEP_VERSIONS/, bad),
+    );
+
+  withEnv("ENRICHMENT_RECOVERY_INTERVAL_SECONDS", undefined, () =>
+    assert.equal(enrichmentRecoveryIntervalSecondsSetting(), 60),
+  );
+  withEnv("ENRICHMENT_RECOVERY_INTERVAL_SECONDS", "300", () =>
+    assert.equal(enrichmentRecoveryIntervalSecondsSetting(), 300),
+  );
+  withEnv("ENRICHMENT_RECOVERY_INTERVAL_SECONDS", "0", () =>
+    assert.throws(() => enrichmentRecoveryIntervalSecondsSetting(), /ENRICHMENT_RECOVERY/),
+  );
+
+  const dir = mkdtempSync(join(tmpdir(), "media-list-config-"));
+  try {
+    const file = join(dir, "application.json");
+    writeFileSync(file, JSON.stringify({ backup: { keepVersions: 12 } }));
+    assert.equal(loadRuntimeConfig(file).backup?.keepVersions, 12);
+    writeFileSync(file, JSON.stringify({ backup: { keepVersions: 0 } }));
+    assert.throws(() => loadRuntimeConfig(file), /keepVersions/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

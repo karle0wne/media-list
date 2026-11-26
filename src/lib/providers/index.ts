@@ -53,22 +53,87 @@ export async function searchAllProviders(query: string): Promise<MediaCandidate[
   return dedupeCandidates(candidates).slice(0, 18);
 }
 
+type ExactLookup = (
+  externalId: string,
+  externalSubId: string,
+  type?: MediaType,
+) => Promise<MediaCandidate | null>;
+
+// One entry per source; `satisfies` makes the table exhaustive (see providers/catalog.ts).
+const exactLookups = {
+  ANILIST: (externalId) => getAniListById(externalId),
+  OPENLIBRARY: (externalId) => getOpenLibraryWork(externalId),
+  RAWG: (externalId) => getRawgGame(externalId),
+  TMDB: async (externalId, externalSubId, type) => {
+    if (externalSubId) return getTmdbSeason(externalId, externalSubId);
+    return type === "MOVIE" ? getTmdbMovie(externalId) : null;
+  },
+} satisfies Record<ExternalSource, ExactLookup>;
+
 export async function resolveExact(
   source: ExternalSource,
   externalId: string,
   externalSubId = "",
   type?: MediaType,
 ): Promise<MediaCandidate | null> {
-  if (source === "ANILIST") return getAniListById(externalId);
-  if (source === "OPENLIBRARY") return getOpenLibraryWork(externalId);
-  if (source === "RAWG") return getRawgGame(externalId);
-  if (source === "TMDB") {
-    if (externalSubId) return getTmdbSeason(externalId, externalSubId);
-    if (type === "MOVIE") return getTmdbMovie(externalId);
-    return null;
-  }
-  return null;
+  return (await exactLookups[source]?.(externalId, externalSubId, type)) ?? null;
 }
+
+type UrlHandler = (url: URL) => Promise<MediaCandidate[]>;
+const single = async (lookup: Promise<MediaCandidate | null>) => {
+  const item = await lookup;
+  return item ? [item] : [];
+};
+
+// Pasted links, by site. Each handler knows only its own URL shapes.
+const urlHandlers = new Map<string, UrlHandler>([
+  [
+    "anilist.co",
+    async (url) => {
+      const id = url.pathname.match(/\/anime\/(\d+)/)?.[1];
+      return id ? single(getAniListById(id)) : [];
+    },
+  ],
+  [
+    "myanimelist.net",
+    async (url) => {
+      const id = url.pathname.match(/\/anime\/(\d+)/)?.[1];
+      return id ? single(getAniListByMalId(id)) : [];
+    },
+  ],
+  [
+    "themoviedb.org",
+    async (url) => {
+      const movie = url.pathname.match(/\/movie\/(\d+)/)?.[1];
+      if (movie) return single(getTmdbMovie(movie));
+      const tv = url.pathname.match(/\/tv\/(\d+)/)?.[1];
+      const season = url.pathname.match(/\/season\/(\d+)/)?.[1];
+      if (tv && season) return single(getTmdbSeason(tv, `season:${season}`));
+      return tv ? getTmdbShowSeasons(tv) : [];
+    },
+  ],
+  [
+    "imdb.com",
+    async (url) => {
+      const id = url.pathname.match(/\/title\/(tt\d+)/)?.[1];
+      return id ? findTmdbByImdb(id) : [];
+    },
+  ],
+  [
+    "openlibrary.org",
+    async (url) => {
+      const id = url.pathname.match(/\/works\/(OL\d+W)/i)?.[1];
+      return id ? single(getOpenLibraryWork(id)) : [];
+    },
+  ],
+  [
+    "rawg.io",
+    async (url) => {
+      const slug = url.pathname.match(/^\/games\/([a-z0-9][a-z0-9-]*)\/?$/i)?.[1];
+      return slug && rawgConfigured() ? single(getRawgGame(slug)) : [];
+    },
+  ],
+]);
 
 export async function resolveExternalUrl(raw: string): Promise<MediaCandidate[]> {
   let url: URL;
@@ -77,50 +142,8 @@ export async function resolveExternalUrl(raw: string): Promise<MediaCandidate[]>
   } catch {
     return [];
   }
-  const host = url.hostname.replace(/^www\./, "").toLowerCase();
-  if (host === "anilist.co") {
-    const id = url.pathname.match(/\/anime\/(\d+)/)?.[1];
-    if (!id) return [];
-    const item = await getAniListById(id);
-    return item ? [item] : [];
-  }
-  if (host === "myanimelist.net") {
-    const id = url.pathname.match(/\/anime\/(\d+)/)?.[1];
-    if (!id) return [];
-    const item = await getAniListByMalId(id);
-    return item ? [item] : [];
-  }
-  if (host === "themoviedb.org") {
-    const movie = url.pathname.match(/\/movie\/(\d+)/)?.[1];
-    if (movie) {
-      const item = await getTmdbMovie(movie);
-      return item ? [item] : [];
-    }
-    const tv = url.pathname.match(/\/tv\/(\d+)/)?.[1];
-    const season = url.pathname.match(/\/season\/(\d+)/)?.[1];
-    if (tv && season) {
-      const item = await getTmdbSeason(tv, `season:${season}`);
-      return item ? [item] : [];
-    }
-    if (tv) return getTmdbShowSeasons(tv);
-  }
-  if (host === "imdb.com") {
-    const id = url.pathname.match(/\/title\/(tt\d+)/)?.[1];
-    return id ? findTmdbByImdb(id) : [];
-  }
-  if (host === "openlibrary.org") {
-    const id = url.pathname.match(/\/works\/(OL\d+W)/i)?.[1];
-    if (!id) return [];
-    const item = await getOpenLibraryWork(id);
-    return item ? [item] : [];
-  }
-  if (host === "rawg.io") {
-    const slug = url.pathname.match(/^\/games\/([a-z0-9][a-z0-9-]*)\/?$/i)?.[1];
-    if (!slug || !rawgConfigured()) return [];
-    const item = await getRawgGame(slug);
-    return item ? [item] : [];
-  }
-  return [];
+  const handler = urlHandlers.get(url.hostname.replace(/^www\./, "").toLowerCase());
+  return handler ? handler(url) : [];
 }
 async function searchAnime(query: string, limit: number) {
   const direct = await searchAniList(query, limit);

@@ -1,19 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 
-const migrationDirs = readdirSync("drizzle", { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort();
+const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 
 function runMigrate(path: string) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const result = spawnSync(command, ["tsx", "scripts/migrate.ts"], {
+  const result = spawnSync(npx, ["tsx", "scripts/migrate.ts"], {
     env: { ...process.env, DATABASE_PATH: path },
     encoding: "utf8",
   });
@@ -24,119 +20,100 @@ function names(db: DatabaseSync, table: string) {
     (column) => column.name,
   );
 }
-function hasTable(db: DatabaseSync, table: string) {
-  return Boolean(
-    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table),
-  );
+function tables(db: DatabaseSync) {
+  return (
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_\\_%' ESCAPE '\\' ORDER BY name",
+      )
+      .all() as Array<{ name: string }>
+  ).map((row) => row.name);
 }
-function assertOperationalSchema(path: string) {
-  const db = new DatabaseSync(path);
-  try {
-    assert.ok(hasTable(db, "service_state"));
-    for (const table of ["sessions", "password_reset_tokens", "magic_login_tokens", "invites"])
-      assert.equal(hasTable(db, table), false, `${table} must be removed`);
-    const userColumns = names(db, "users");
-    for (const name of ["id", "username", "email", "external_subject", "created_at"])
-      assert.ok(userColumns.includes(name), name);
-    for (const name of ["password_hash", "role", "active"])
-      assert.equal(userColumns.includes(name), false, name);
-    assert.ok(
-      db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='users_email_uq'").get(),
-    );
-    assert.ok(
-      db
-        .prepare(
-          "SELECT 1 FROM sqlite_master WHERE type='index' AND name='users_external_subject_uq'",
-        )
-        .get(),
-    );
-    const mediaColumns = names(db, "media");
-    for (const name of [
-      "romanized_title",
-      "external_url",
-      "metadata_refreshed_at",
-      "metadata_status",
-      "metadata_error",
-    ])
-      assert.ok(mediaColumns.includes(name), name);
-    for (const name of [
-      "runtime_minutes",
-      "country_code",
-      "episode_count",
-      "page_count",
-      "metadata_json",
-      "created_at",
-    ])
-      assert.equal(mediaColumns.includes(name), false, name);
-    const stateColumns = names(db, "user_media");
-    assert.ok(stateColumns.includes("updated_at"), "updated_at");
-    assert.equal(
-      stateColumns.includes("time_spent_override_minutes"),
-      false,
-      "time_spent_override_minutes",
-    );
-    assert.ok(
-      db
-        .prepare(
-          "SELECT 1 FROM sqlite_master WHERE type='index' AND name='media_metadata_status_idx'",
-        )
-        .get(),
-    );
-    assert.ok(hasTable(db, "__drizzle_migrations"));
-  } finally {
-    db.close();
-  }
+function indexNames(db: DatabaseSync) {
+  return (
+    db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>
+  ).map((row) => row.name);
 }
 
-test("empty database is created as business/data-owner state only", () => {
+test("a new installation gets the whole schema from one baseline migration", () => {
+  assert.equal(
+    readdirSync("drizzle", { withFileTypes: true }).filter((entry) => entry.isDirectory()).length,
+    1,
+    "history is a single baseline until the first real deployment exists",
+  );
   const dir = mkdtempSync(join(tmpdir(), "media-list-migrate-"));
   const path = join(dir, "db.sqlite");
   try {
     runMigrate(path);
-    assertOperationalSchema(path);
+    runMigrate(path); // applying again is a no-op, which is what every container start does
+    const db = new DatabaseSync(path);
+    try {
+      assert.deepEqual(tables(db), [
+        "import_batches",
+        "import_rows",
+        "media",
+        "service_state",
+        "user_media",
+        "users",
+      ]);
+      const userColumns = names(db, "users");
+      for (const name of ["id", "username", "email", "external_subject", "created_at"])
+        assert.ok(userColumns.includes(name), name);
+      for (const name of ["password_hash", "role", "active"])
+        assert.equal(userColumns.includes(name), false, `${name} is gateway territory`);
+      for (const name of [
+        "metadata_refreshed_at",
+        "metadata_status",
+        "metadata_error",
+        "romanized_title",
+        "external_url",
+      ])
+        assert.ok(names(db, "media").includes(name), name);
+      assert.ok(names(db, "user_media").includes("updated_at"));
+      for (const index of [
+        "users_email_uq",
+        "users_external_subject_uq",
+        "media_external_identity_uq",
+        "media_metadata_status_idx",
+        "user_media_user_media_uq",
+      ])
+        assert.ok(indexNames(db).includes(index), index);
+      const applied = db.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as {
+        n: number;
+      };
+      assert.equal(applied.n, 1);
+    } finally {
+      db.close();
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("legacy database is baselined and cleaned without losing user state", () => {
-  const dir = mkdtempSync(join(tmpdir(), "media-list-legacy-"));
-  const path = join(dir, "db.sqlite");
-  const db = new DatabaseSync(path);
+test("the migration history matches schema.ts, so nothing is left to generate", () => {
+  const dir = mkdtempSync(join(tmpdir(), "media-list-drift-"));
   try {
-    db.exec(readFileSync(join("drizzle", migrationDirs[0], "migration.sql"), "utf8"));
-    db.exec(
-      "CREATE TABLE app_migrations (id TEXT PRIMARY KEY NOT NULL, applied_at INTEGER NOT NULL)",
+    cpSync("drizzle", join(dir, "drizzle"), { recursive: true });
+    writeFileSync(
+      join(dir, "drizzle.config.ts"),
+      `export default {
+  schema: ${JSON.stringify(resolve("src/db/schema.ts"))},
+  out: ${JSON.stringify(join(dir, "drizzle"))},
+  dialect: "sqlite",
+};
+`,
     );
-    db.prepare("INSERT INTO app_migrations(id, applied_at) VALUES (?, ?)").run(
-      "0000_init",
-      Date.now(),
+    const result = spawnSync(
+      npx,
+      ["drizzle-kit", "generate", "--config", join(dir, "drizzle.config.ts")],
+      {
+        encoding: "utf8",
+      },
     );
-    db.prepare(
-      "INSERT INTO users(id, username, password_hash, role, active, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run("legacy-user", "legacy_user", "legacy-hash", "ADMIN", 1, Date.now());
-  } finally {
-    db.close();
-  }
-  try {
-    runMigrate(path);
-    assertOperationalSchema(path);
-    const migrated = new DatabaseSync(path);
-    try {
-      const user = migrated
-        .prepare("SELECT id, username FROM users WHERE id=?")
-        .get("legacy-user") as { id: string; username: string } | undefined;
-      assert.ok(user);
-      assert.equal(user.id, "legacy-user");
-      assert.equal(user.username, "legacy_user");
-      const history = migrated
-        .prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at")
-        .all() as Array<{ created_at: number }>;
-      assert.ok(history.length >= 3);
-      assert.equal(Number(history[0].created_at), 1786890906000);
-    } finally {
-      migrated.close();
-    }
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.equal(result.status, 0, output);
+    assert.match(output, /No schema changes/, "run `npm run db:generate` and commit the result");
+    assert.equal(readdirSync(join(dir, "drizzle")).length, 1, "no new migration was written");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

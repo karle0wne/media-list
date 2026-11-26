@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeProviderCoverUrl } from "../src/components/provider-cover";
-import { externalMediaUrl } from "../src/lib/providers/urls";
+import { externalMediaUrl } from "../src/lib/providers/catalog";
 test("RAWG library links target the concrete game", () => {
   assert.equal(externalMediaUrl("RAWG", "12345", ""), "https://rawg.io/games/12345");
 });

@@ -1,34 +1,15 @@
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
-import { DatabaseSync } from "node:sqlite";
-import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { databasePath } from "../src/db/index";
-import { applySchemaCompatibility } from "../src/db/compat";
+
+// The migration history is a single baseline plus whatever Drizzle generates after it, so
+// applying it is all drizzle-kit has to do. The resolved path is exported because drizzle-kit
+// reads DATABASE_PATH on its own and must see the same file the application will open.
 const dbPath = databasePath();
 process.env.DATABASE_PATH = dbPath;
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
-const sqlite = new DatabaseSync(dbPath);
-try {
-  const hasTable = (name: string) =>
-    Boolean(sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
-  if (hasTable("app_migrations") && hasTable("users") && !hasTable("__drizzle_migrations")) {
-    const legacyInitial = sqlite.prepare("SELECT 1 FROM app_migrations WHERE id='0000_init'").get();
-    if (!legacyInitial)
-      throw new Error(
-        "Legacy database detected without 0000_init marker; refusing automatic baseline",
-      );
-    sqlite.exec(
-      "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at NUMERIC)",
-    );
-    sqlite
-      .prepare("INSERT INTO __drizzle_migrations(hash, created_at) VALUES (?, ?)")
-      .run("legacy-0000-baseline", 1786890906000);
-    console.log("Bridged legacy 0000_init into Drizzle migration history.");
-  }
-} finally {
-  sqlite.close();
-}
 const command = process.platform === "win32" ? "npx.cmd" : "npx";
 const result = spawnSync(command, ["drizzle-kit", "migrate"], {
   stdio: "inherit",
@@ -36,10 +17,4 @@ const result = spawnSync(command, ["drizzle-kit", "migrate"], {
 });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
-const cleanup = new DatabaseSync(dbPath);
-try {
-  applySchemaCompatibility(cleanup);
-} finally {
-  cleanup.close();
-}
 console.log("Database migrations applied.");

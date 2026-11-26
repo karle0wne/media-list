@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ProviderCover } from "@/components/provider-cover";
 import { signCandidate } from "@/lib/candidate-token";
 import { requireIdentity } from "@/lib/identity";
-import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import {
   getSeriesSeasons,
   rawgConfigured,
@@ -26,7 +25,6 @@ export default async function AddPage({
   searchParams: Promise<RawSearchParams>;
 }) {
   await requireIdentity();
-  scheduleMediaEnrichment();
   const params = singleSearchParams(await searchParams);
   const gamesEnabled = rawgConfigured();
   const categories: Array<[MediaType, string]> = gamesEnabled

@@ -1,8 +1,7 @@
-import { requireIdentity } from "@/lib/identity";
+import { withIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { exportCanonical } from "@/lib/services/canonical";
-export async function GET() {
-  const user = await requireIdentity();
+export const GET = withIdentity(async (user) => {
   const csv = await exportCanonical(getDatabase().db, user.id);
   return new Response(csv, {
     headers: {
@@ -11,4 +10,4 @@ export async function GET() {
       "cache-control": "no-store",
     },
   });
-}
+});

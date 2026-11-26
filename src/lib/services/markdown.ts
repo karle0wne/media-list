@@ -1,6 +1,6 @@
 import type { AppDb } from "@/db";
 import { STATUS_LABELS, TYPE_PLURAL_LABELS } from "../labels";
-import { externalMediaUrl } from "../providers/urls";
+import { externalMediaUrl } from "../providers/catalog";
 import type { MediaStatus, MediaType } from "../types";
 import { listUserMedia } from "./media";
 

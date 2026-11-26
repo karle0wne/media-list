@@ -2,9 +2,8 @@ import "./library.css";
 import { cookies } from "next/headers";
 import { requireIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
-import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import { listUserMedia, type MediaSort, type SortDirection } from "@/lib/services/media";
-import { externalMediaUrl } from "@/lib/providers/urls";
+import { externalMediaUrl } from "@/lib/providers/catalog";
 import { isMediaStatus, isMediaType } from "@/lib/user-media";
 import type { MediaStatus } from "@/lib/types";
 import {
@@ -40,7 +39,6 @@ const sortKeys = new Set<MediaSort>([
 
 export default async function Home({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
   const user = await requireIdentity();
-  scheduleMediaEnrichment();
 
   const rawParams = singleSearchParams(await searchParams);
   // `error` is shown once; the links and forms below carry only the view state.

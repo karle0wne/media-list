@@ -18,6 +18,8 @@ Production exposes the application only through the trusted central-auth/reverse
 
 The application maps that trusted identity to a local `users` row used only as a data owner. Existing rows can be linked by verified email when an external subject is first seen. Business data remains scoped by the resolved local owner.
 
+Network placement is not the only guard. The gateway and the application share a secret (`GATEWAY_SHARED_SECRET`, at least 32 characters): the gateway sends it as `X-Gateway-Secret` on every request it forwards and removes any copy a client supplies. The application compares it in constant time before it reads a single `X-Auth-*` header and answers `401` otherwise, so identity headers forged by anything that is not the gateway are ignored. In production the container (and `npm start`) refuses to start without the secret, with one readable error (`scripts/check-config.ts`; Next.js alone would only log the failure and answer 500); `ALLOW_UNSIGNED_GATEWAY_HEADERS=true` is the explicit opt-out for an installation isolated by the network alone, and only an explicit `NODE_ENV=development` or `test` runtime needs no secret (an unset or unrecognised `NODE_ENV` is treated like production). `/api/health` is the only unauthenticated route and exposes liveness and the revision only.
+
 Running the application directly on a public port while accepting arbitrary `X-Auth-*` headers is outside the production security contract.
 
 ## Durable product invariants
@@ -54,7 +56,7 @@ Running the application directly on a public port while accepting arbitrary `X-A
 - **RAWG** — games when `RAWG_API_KEY` is configured.
 - **Wikidata** — bounded localized search assistance only, never canonical identity.
 
-Provider HTTP requests have application-owned deadlines. Rate limits and temporary upstream failures become visible retry-later metadata states; there are no automatic retry loops, provider queues, self-hosted mail servers, or image proxy services.
+Provider HTTP requests have application-owned deadlines. Rate limits, outages and timeouts leave a record pending and pause only the affected provider (honouring `Retry-After`); a record that keeps failing becomes a visible error that can be retried. Interrupted work is finished by one bounded background pass every `ENRICHMENT_RECOVERY_INTERVAL_SECONDS` (started when the server starts, never by a page view). There are no provider queues, self-hosted mail servers, or image proxy services.
 
 ## Entry and export paths
 
@@ -71,7 +73,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Local/manual requests need trusted identity headers because the application intentionally has no local login screen.
+Local/manual requests need trusted identity headers (`X-Auth-Subject`, `X-Auth-Email`, `X-Auth-Name`) because the application intentionally has no local login screen. Development mode does not require the gateway secret.
 
 Useful checks:
 
@@ -91,21 +93,27 @@ The main configuration surface is [.env.example](.env.example). Production crede
 git clone https://github.com/karle0wne/media-list.git
 cd media-list
 cp .env.example .env
-# Edit provider/storage settings as needed.
+echo "GATEWAY_SHARED_SECRET=$(openssl rand -hex 32)" >> .env   # then give the same value to the gateway
+mkdir -p data && sudo chown 10001:10001 data                    # the container runs as uid 10001
+# Edit provider/storage settings in .env as needed.
 docker compose up -d --build
 ```
 
-Compose applies pending migrations before starting Next.js. The Compose/environment configuration is authoritative for the current local data path and runtime image. Production uses the same Compose contract with the application bound privately behind the reverse proxy.
+The container runs as an unprivileged user (uid 10001) under `tini`, applies pending migrations, then starts Next.js; `docker stop` is a clean shutdown. A data directory the user cannot write to is reported at start instead of failing later (`scripts/check-config.ts`, which `npm start` runs too). The container exits at start with a clear message when `GATEWAY_SHARED_SECRET` (or another required setting) is missing or invalid. The Compose/environment configuration is authoritative for the current local data path and runtime image. Production uses the same Compose contract with the application bound privately behind the reverse proxy.
+
+The published image (`Dockerfile.runtime`, built by CI over an already verified build) and the one Compose builds (`Dockerfile`) share the same runtime stage; a test keeps them identical.
 
 ## Database and maintenance
 
-Generate schema migrations with `npm run db:generate`; apply them with `npm run db:migrate`. The migration entrypoint includes an idempotent compatibility bridge for heterogeneous historical databases. It preserves local data-owner/media relations while reconciling the current schema, including cleanup of legacy application-owned authentication state where it still exists.
+The migration history is one baseline (`drizzle/*_init`) that creates the whole schema; the service had no production data when it was consolidated, so there is no legacy bridge. Change `src/db/schema.ts`, run `npm run db:generate` and commit the result; a test fails when the schema and the migrations drift apart. Apply migrations with `npm run db:migrate` (the container does it at every start; it is idempotent).
 
 Routine commands are `npm run cleanup`, `npm run maintenance`, and `npm run metadata:refresh`.
 
 ## Backup and restore
 
-The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it. Backup/restore commands and object-key details are defined by the application code/configuration rather than duplicated here. The durable contract is a validated S3-compatible disaster-recovery object; confirmed absence of the recovery object is first bootstrap, while other storage failures fail closed.
+The application owns SQLite backup/restore correctness while an external control plane may decide when to invoke it (`npm run backup`, `npm run restore`). Each backup is a validated `VACUUM INTO` snapshot uploaded twice under `S3_PREFIX`: as a dated version `history/<UTC stamp>-<sha256 prefix>.db` and as the recovery object `latest/media-list.db`. The version is written first, so a failed upload never leaves `latest` pointing at something without history. The newest `BACKUP_KEEP_VERSIONS` (default 30) versions are kept; pruning failures are warnings, not backup failures. The SHA-256 of every object is stored with it and checked on restore: an object without a checksum, or a version whose name does not match its content, is refused. The version just written is never pruned, even when the host clock stepped back.
+
+`npm run restore` restores `latest`, refuses a file that is not a media-list database (no `users`/`media`/`user_media` tables) and keeps the database it replaces as `<database>.before-restore-<stamp>`; `npm run restore -- --list` shows the stored versions and `npm run restore -- history/<name>.db` restores one of them (arbitrary keys are refused). The durable contract is a validated S3-compatible disaster-recovery object; confirmed absence of the `latest` object is first bootstrap, while other storage failures, a missing explicit version and checksum mismatches fail closed.
 
 ## Runtime contract
 

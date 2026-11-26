@@ -18,30 +18,46 @@ export type ExactResolver = (
   externalSubId: string,
   type?: MediaIdentity["type"],
 ) => Promise<MediaCandidate | null>;
-const active = new Set<string>();
 
 // A provider that rate-limits or is down is left alone for a while. The pause is per provider
 // (a TMDB outage must not stop AniList work) and in memory: it only protects the provider and
 // the background work from hammering, nothing depends on it surviving a restart.
 const DEFAULT_COOLDOWN_MS = 60_000;
 const MAX_COOLDOWN_MS = 15 * 60_000;
-const cooldowns = new Map<ExternalSource, number>();
 // A record whose id makes the provider fail every time must not stay PENDING (and pause the
 // provider) for good: after a few temporary failures in a row it becomes an error to retry.
 const MAX_DEFERRALS = 5;
-const deferrals = new Map<string, number>();
+
+// Kept on globalThis, like the database connection: the background loop (started from the
+// instrumentation hook) and the request handlers may be bundled separately, and they must see
+// the same pauses and the same in-flight records.
+type EnrichmentState = {
+  active: Set<string>;
+  cooldowns: Map<ExternalSource, number>;
+  deferrals: Map<string, number>;
+};
+declare global {
+  var __mediaListEnrichmentState: EnrichmentState | undefined;
+}
+function state(): EnrichmentState {
+  return (globalThis.__mediaListEnrichmentState ??= {
+    active: new Set(),
+    cooldowns: new Map(),
+    deferrals: new Map(),
+  });
+}
 
 export function resetEnrichmentCooldowns() {
-  cooldowns.clear();
-  deferrals.clear();
+  state().cooldowns.clear();
+  state().deferrals.clear();
 }
 
 function coolingSources(now: number) {
-  return [...cooldowns].filter(([, until]) => until > now).map(([source]) => source);
+  return [...state().cooldowns].filter(([, until]) => until > now).map(([source]) => source);
 }
 
 function cooldownEnd(now: number) {
-  const ends = [...cooldowns.values()].filter((until) => until > now);
+  const ends = [...state().cooldowns.values()].filter((until) => until > now);
   return ends.length ? Math.min(...ends) : null;
 }
 
@@ -50,7 +66,7 @@ function deferSource(source: ExternalSource, error: unknown, now: number) {
     error instanceof ProviderResponseError && error.retryAfterSeconds != null
       ? error.retryAfterSeconds * 1000
       : DEFAULT_COOLDOWN_MS;
-  cooldowns.set(source, now + Math.min(Math.max(requested, 5_000), MAX_COOLDOWN_MS));
+  state().cooldowns.set(source, now + Math.min(Math.max(requested, 5_000), MAX_COOLDOWN_MS));
 }
 
 /** Validates a provider answer for a shared record and applies it, including owners' totals. */
@@ -79,8 +95,8 @@ export async function enrichMediaMetadata(
   resolver: ExactResolver = resolveExact,
   clock: () => number = Date.now,
 ) {
-  if (active.has(mediaId)) return { state: "busy" as const };
-  active.add(mediaId);
+  if (state().active.has(mediaId)) return { state: "busy" as const };
+  state().active.add(mediaId);
   try {
     const item = await findMediaById(db, mediaId);
     if (!item || item.metadataStatus === "READY") return { state: "skipped" as const };
@@ -97,12 +113,12 @@ export async function enrichMediaMetadata(
       );
       if (!candidate) throw new Error("Provider validation failed");
       await applyProviderCandidate(db, item, candidate);
-      deferrals.delete(mediaId);
+      state().deferrals.delete(mediaId);
       return { state: "ready" as const };
     } catch (error) {
-      const failures = (deferrals.get(mediaId) ?? 0) + 1;
+      const failures = (state().deferrals.get(mediaId) ?? 0) + 1;
       if (isTemporaryProviderFailure(error) && failures < MAX_DEFERRALS) {
-        deferrals.set(mediaId, failures);
+        state().deferrals.set(mediaId, failures);
         // A rate limit or outage says nothing about the item: it stays PENDING and is tried
         // again later instead of becoming an error the user has to retry by hand.
         deferSource(item.externalSource, error, clock());
@@ -111,7 +127,7 @@ export async function enrichMediaMetadata(
           error: error instanceof Error ? error.message : "Provider temporarily unavailable",
         };
       }
-      deferrals.delete(mediaId);
+      state().deferrals.delete(mediaId);
       const message = (error instanceof Error ? error.message : "Metadata enrichment failed").slice(
         0,
         500,
@@ -128,7 +144,7 @@ export async function enrichMediaMetadata(
       };
     }
   } finally {
-    active.delete(mediaId);
+    state().active.delete(mediaId);
   }
 }
 
@@ -161,19 +177,19 @@ export async function adoptTotalsForMedia(
       type: item.type,
     });
     await adoptTotalForOwners(db, mediaId, candidate);
-    deferrals.delete(`total:${mediaId}`);
+    state().deferrals.delete(`total:${mediaId}`);
     return { state: "ready" as const };
   } catch (error) {
     // The lookup queue re-offers deferred ids, so the same cap as for records applies: an id
     // the provider keeps failing on is dropped after a few attempts instead of cycling forever.
     const key = `total:${mediaId}`;
-    const failures = (deferrals.get(key) ?? 0) + 1;
+    const failures = (state().deferrals.get(key) ?? 0) + 1;
     if (isTemporaryProviderFailure(error) && failures < MAX_DEFERRALS) {
-      deferrals.set(key, failures);
+      state().deferrals.set(key, failures);
       deferSource(item.externalSource, error, clock());
       return { state: "deferred" as const };
     }
-    deferrals.delete(key);
+    state().deferrals.delete(key);
     return { state: "error" as const };
   }
 }

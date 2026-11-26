@@ -1,6 +1,15 @@
+# The runtime stage over a build that CI already verified (see Dockerfile for the build stage;
+# the two final stages must stay identical, which tests/docker.test.ts enforces).
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
-RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+# tini is PID 1: it reaps children and forwards stop signals, so `docker stop` is a clean shutdown.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tini \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
+ && mkdir -p /data \
+ && chown app:app /data
 WORKDIR /app
 COPY --chown=app:app package.json ./package.json
 COPY --chown=app:app node_modules ./node_modules
@@ -12,4 +21,7 @@ COPY --chown=app:app drizzle ./drizzle
 COPY --chown=app:app drizzle.config.ts tsconfig.json ./
 USER app
 EXPOSE 3000
-CMD ["sh", "-c", "npm run db:migrate && exec npm start -- -H 0.0.0.0 -p 3000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+ENTRYPOINT ["tini", "--"]
+CMD ["sh", "scripts/docker-start.sh"]

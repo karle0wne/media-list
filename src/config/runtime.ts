@@ -17,7 +17,7 @@ type S3RuntimeConfig = {
 export type RuntimeConfig = {
   databasePath?: string;
   tmdb?: TmdbRuntimeConfig;
-  backup?: { s3?: S3RuntimeConfig };
+  backup?: { s3?: S3RuntimeConfig; keepVersions?: number };
 };
 
 function object(value: unknown, name: string): Record<string, unknown> {
@@ -59,8 +59,13 @@ function optionalPositiveInteger(value: unknown, name: string, maximum?: number)
 export function loadRuntimeConfig(
   path = process.env.MEDIA_LIST_CONFIG_FILE?.trim() || DEFAULT_CONFIG_FILE,
 ): RuntimeConfig {
-  if (!existsSync(path)) return {};
-  const root = object(JSON.parse(readFileSync(path, "utf8")), "runtime config");
+  // The path is an operator-supplied runtime location, never part of the build: tell Turbopack
+  // not to trace the whole project for it.
+  if (!existsSync(/* turbopackIgnore: true */ path)) return {};
+  const root = object(
+    JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")),
+    "runtime config",
+  );
   assertKnownFields(root, ["databasePath", "tmdb", "backup"], "runtime config");
 
   let tmdb: TmdbRuntimeConfig | undefined;
@@ -83,7 +88,12 @@ export function loadRuntimeConfig(
   let backup: RuntimeConfig["backup"];
   if (root.backup !== undefined) {
     const rawBackup = object(root.backup, "runtime config.backup");
-    assertKnownFields(rawBackup, ["s3"], "runtime config.backup");
+    assertKnownFields(rawBackup, ["s3", "keepVersions"], "runtime config.backup");
+    const keepVersions = optionalPositiveInteger(
+      rawBackup.keepVersions,
+      "runtime config.backup.keepVersions",
+      1000,
+    );
     if (rawBackup.s3 !== undefined) {
       const rawS3 = object(rawBackup.s3, "runtime config.backup.s3");
       assertKnownFields(
@@ -92,6 +102,7 @@ export function loadRuntimeConfig(
         "runtime config.backup.s3",
       );
       backup = {
+        keepVersions,
         s3: {
           endpoint: optionalString(rawS3.endpoint, "runtime config.backup.s3.endpoint"),
           region: optionalString(rawS3.region, "runtime config.backup.s3.region"),
@@ -100,7 +111,7 @@ export function loadRuntimeConfig(
         },
       };
     } else {
-      backup = {};
+      backup = { keepVersions };
     }
   }
 
@@ -131,6 +142,16 @@ export function tmdbMetadataTtlDaysSetting(config = loadRuntimeConfig()) {
 
 export function tmdbRefreshLimitSetting(config = loadRuntimeConfig()) {
   return envPositiveInteger("TMDB_REFRESH_LIMIT", 500) ?? config.tmdb?.refreshLimit ?? 50;
+}
+
+/** How often the server looks for enrichment that a restart or a provider pause left behind. */
+export function enrichmentRecoveryIntervalSecondsSetting() {
+  return envPositiveInteger("ENRICHMENT_RECOVERY_INTERVAL_SECONDS", 86_400) ?? 60;
+}
+
+/** How many dated backup versions are kept besides the latest recovery object. */
+export function backupKeepVersionsSetting(config = loadRuntimeConfig()) {
+  return envPositiveInteger("BACKUP_KEEP_VERSIONS", 1000) ?? config.backup?.keepVersions ?? 30;
 }
 
 export function s3EndpointSetting(config = loadRuntimeConfig()) {

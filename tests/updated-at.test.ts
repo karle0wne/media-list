@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applySchemaCompatibility } from "../src/db/compat";
 import { addMediaToUser, listUserMedia, updateUserMedia } from "../src/lib/services/media";
 import { updateUserProgress } from "../src/lib/services/progress";
 import type { MediaCandidate } from "../src/lib/types";
@@ -26,28 +25,6 @@ const book: MediaCandidate = {
   year: 2020,
   pageCount: 300,
 };
-
-test("schema compatibility restores and backfills user_media.updated_at", async () => {
-  const { db, sqlite } = openTestDatabase();
-  try {
-    const user = await createTestDataOwner(db);
-    await addMediaToUser(db, user, anime);
-    const before = sqlite.prepare("SELECT created_at, updated_at FROM user_media").get() as {
-      created_at: number;
-      updated_at: number;
-    };
-    assert.equal(before.updated_at, before.created_at);
-    sqlite.exec("ALTER TABLE user_media DROP COLUMN updated_at");
-    applySchemaCompatibility(sqlite);
-    const after = sqlite.prepare("SELECT created_at, updated_at FROM user_media").get() as {
-      created_at: number;
-      updated_at: number;
-    };
-    assert.equal(after.updated_at, after.created_at);
-  } finally {
-    sqlite.close();
-  }
-});
 
 test("default list sorting follows user updates", async () => {
   const { db, sqlite } = openTestDatabase();
