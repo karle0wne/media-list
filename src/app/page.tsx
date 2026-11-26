@@ -16,7 +16,12 @@ import {
 } from "@/lib/library-view";
 import { STATUS_LABELS, STATUS_ORDER } from "@/lib/labels";
 import { LibraryWorkspace } from "@/components/library-workspace";
-import { singleSearchParams, type RawSearchParams } from "@/lib/search-params";
+import {
+  queryPath,
+  singleSearchParams,
+  withoutMessages,
+  type RawSearchParams,
+} from "@/lib/search-params";
 
 const statuses: Array<[string, MediaStatus | ""]> = [
   ["All", ""],
@@ -37,7 +42,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
   const user = await requireIdentity();
   scheduleMediaEnrichment();
 
-  const params = singleSearchParams(await searchParams);
+  const rawParams = singleSearchParams(await searchParams);
+  // `error` is shown once; the links and forms below carry only the view state.
+  const params = withoutMessages(rawParams);
   const viewMode = parseViewMode((await cookies()).get(VIEW_MODE_COOKIE)?.value);
   const status = isMediaStatus(params.status) ? params.status : undefined;
   const selectedTypes = (params.types ?? "").split(",").filter(isMediaType);
@@ -92,7 +99,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
 
   return (
     <section className="libraryPage">
-      {params.error && <p className="error">{params.error}</p>}
+      {rawParams.error && <p className="error">{rawParams.error}</p>}
       <LibraryWorkspace
         key={current}
         initialViewMode={viewMode}
@@ -123,13 +130,4 @@ function parseScore(value?: string) {
   if (!value || !/^\d+$/.test(value)) return undefined;
   const n = Number(value);
   return n >= 1 && n <= 10 ? n : undefined;
-}
-
-function queryPath(values: Record<string, string | undefined>) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) {
-    if (value) params.set(key, value);
-  }
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
 }

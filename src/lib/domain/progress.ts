@@ -28,7 +28,9 @@ export function initialProgress(
   userData: ImportedUserData,
   candidate: Pick<MediaCandidate, "type" | "pageCount" | "episodeCount">,
 ) {
-  const progressTotal = userData.progressTotal ?? defaultProgressTotal(candidate);
+  const progressTotal = userData.progressTotalUnknown
+    ? null
+    : (userData.progressTotal ?? defaultProgressTotal(candidate));
   const progressCurrent =
     userData.status === "COMPLETED" && progressTotal != null
       ? progressTotal
@@ -36,6 +38,21 @@ export function initialProgress(
   if (progressTotal != null && progressCurrent > progressTotal)
     throw new Error(`Progress cannot exceed the known total (${progressTotal})`);
   return { progressCurrent, progressTotal };
+}
+
+/**
+ * Restoring a file must not lose a position because its numbers disagree (for example data
+ * saved by an older version). Progress above the total is kept and the total becomes unknown;
+ * `adjusted` tells the caller to report it.
+ */
+export function reconcileImportedProgress(
+  userData: ImportedUserData,
+  candidate: Pick<MediaCandidate, "type" | "pageCount" | "episodeCount">,
+): { userData: ImportedUserData; adjusted: boolean } {
+  const total = userData.progressTotal ?? defaultProgressTotal(candidate);
+  if (total != null && userData.status !== "COMPLETED" && (userData.progressCurrent ?? 0) > total)
+    return { userData: { ...userData, progressTotalUnknown: true }, adjusted: true };
+  return { userData, adjusted: false };
 }
 
 /** Marking a position COMPLETED fills progress up to the known total, if there is one. */

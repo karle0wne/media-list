@@ -3,6 +3,7 @@ import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
 import { parseCsv, rowsToObjects, stringifyCsv } from "../csv";
 import { assertWellFormedIdentity } from "../domain/identity";
+import { reconcileImportedProgress } from "../domain/progress";
 import { parseExternalSource, parseMediaType, parseUserMediaInput } from "../user-media";
 import { addSelectedMediaToUser } from "./media";
 
@@ -64,27 +65,38 @@ export async function exportCanonical(db: AppDb, userId: string) {
   ]);
 }
 
+// The import runs inside one request on the single database connection: bound the work and
+// hand control back to the event loop regularly so other requests keep being served.
+const MAX_ROWS = 5_000;
+const YIELD_EVERY = 25;
+
 /**
  * Restores a canonical file without waiting for any provider: every row is saved locally at
  * once from the file's own data and its shared record is left PENDING for background
  * enrichment. A backup restore therefore works even while a provider is down or rate limited.
  */
 export async function importCanonical(db: AppDb, userId: string, input: string) {
-  const rows = parseCsv(input.replace(/^﻿/, ""));
+  const rows = parseCsv(input.replace(/^\uFEFF/, ""));
   const headers = new Set((rows[0] ?? []).map((header) => header.trim()));
   const missing = REQUIRED_HEADERS.filter((header) => !headers.has(header));
   if (rows.length && missing.length)
     throw new Error(`CSV is missing required columns: ${missing.join(", ")}`);
+  if (rows.length - 1 > MAX_ROWS)
+    throw new Error(`CSV has too many rows (${MAX_ROWS} at most per import)`);
 
   const report = {
     imported: 0,
     duplicates: 0,
     invalid: 0,
+    adjusted: 0,
     needsEnrichment: false,
+    /** READY shared records whose new positions still need a total from the provider. */
+    totalLookups: [] as string[],
     errors: [] as string[],
   };
   const objects = rowsToObjects(rows);
   for (let index = 0; index < objects.length; index += 1) {
+    if (index > 0 && index % YIELD_EVERY === 0) await new Promise((r) => setImmediate(r));
     const row = objects[index];
     try {
       const identity = {
@@ -97,27 +109,31 @@ export async function importCanonical(db: AppDb, userId: string, input: string) 
       assertWellFormedIdentity(identity);
       const createdAt = parseTimestamp(row.created_at, "created_at");
       const updatedAt = parseTimestamp(row.updated_at, "updated_at");
-      const userData = {
-        ...parseUserMediaInput({
-          status: row.status,
-          score: row.score,
-          progressCurrent: row.progress_current,
-          progressTotal: row.progress_total,
-          notes: row.notes,
-        }),
-        createdAt,
-        updatedAt: createdAt && updatedAt && updatedAt < createdAt ? createdAt : updatedAt,
-      };
       const key = `${identity.source}:${identity.externalId}:${identity.externalSubId}`;
-      const result = await addSelectedMediaToUser(
-        db,
-        userId,
-        { ...identity, key, title: cleanTitle(row.title) || key },
-        userData,
+      const candidate = { ...identity, key, title: cleanTitle(row.title) || key };
+      const reconciled = reconcileImportedProgress(
+        {
+          ...parseUserMediaInput({
+            status: row.status,
+            score: row.score,
+            progressCurrent: row.progress_current,
+            progressTotal: row.progress_total,
+            notes: row.notes,
+          }),
+          createdAt,
+          updatedAt: createdAt && updatedAt && updatedAt < createdAt ? createdAt : updatedAt,
+        },
+        candidate,
       );
-      if (result.inserted) report.imported += 1;
-      else report.duplicates += 1;
+      const result = await addSelectedMediaToUser(db, userId, candidate, reconciled.userData, {
+        thin: true,
+      });
+      if (result.inserted) {
+        report.imported += 1;
+        if (reconciled.adjusted) report.adjusted += 1;
+      } else report.duplicates += 1;
       if (result.needsEnrichment) report.needsEnrichment = true;
+      if (result.needsTotal) report.totalLookups.push(result.item.id);
     } catch (error) {
       report.invalid += 1;
       report.errors.push(

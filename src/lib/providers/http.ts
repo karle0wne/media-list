@@ -32,6 +32,40 @@ export async function nullIfNotFound<T>(operation: () => Promise<T>): Promise<T 
   }
 }
 
+/** The installation has no credentials for this provider; no request was made. */
+export class ProviderNotConfiguredError extends Error {
+  constructor(variable: string) {
+    super(`${variable} is not configured`);
+    this.name = "ProviderNotConfiguredError";
+  }
+}
+
+/** The provider did not answer in time. */
+export class ProviderTimeoutError extends Error {
+  constructor(timeoutMs: number, options?: ErrorOptions) {
+    super(`Provider request timed out after ${timeoutMs}ms`, options);
+    this.name = "ProviderTimeoutError";
+  }
+}
+
+/** The provider could not be reached at all (DNS, connection reset, offline). */
+export class ProviderNetworkError extends Error {
+  constructor(detail: string, options?: ErrorOptions) {
+    super(`Provider unreachable: ${detail}`, options);
+    this.name = "ProviderNetworkError";
+  }
+}
+
+/**
+ * Failures that say nothing about the item and are worth trying again later: rate limits,
+ * provider outages, timeouts and unreachable networks. Anything else (a missing token, an
+ * identity mismatch, a rejected id) will fail the same way next time.
+ */
+export function isTemporaryProviderFailure(error: unknown) {
+  if (error instanceof ProviderResponseError) return error.status === 429 || error.status >= 500;
+  return error instanceof ProviderTimeoutError || error instanceof ProviderNetworkError;
+}
+
 export async function providerFetch(
   input: string | URL | Request,
   init: RequestInit = {},
@@ -41,7 +75,8 @@ export async function providerFetch(
     return await fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError")
-      throw new Error(`Provider request timed out after ${timeoutMs}ms`, { cause: error });
+      throw new ProviderTimeoutError(timeoutMs, { cause: error });
+    if (error instanceof TypeError) throw new ProviderNetworkError(error.message, { cause: error });
     throw error;
   }
 }

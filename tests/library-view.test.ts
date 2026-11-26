@@ -52,3 +52,18 @@ test("the stored view mode accepts only known values", async () => {
   assert.equal(parseViewMode("<script>"), "table");
   assert.equal(parseViewMode(undefined), "table");
 });
+
+test("an error message is shown once and never carried into links or later redirects", async () => {
+  const { pathWithError, queryPath, safeReturnPath, withoutMessages } =
+    await import("../src/lib/search-params");
+  const params = { q: "naruto", sort: "title", error: "boom", result: "done" };
+  assert.deepEqual(withoutMessages(params), { q: "naruto", sort: "title" });
+  assert.equal(queryPath(withoutMessages(params)), "/?q=naruto&sort=title");
+  assert.equal(safeReturnPath("/?q=naruto&error=boom"), "/?q=naruto");
+  assert.equal(safeReturnPath("/?error=boom"), "/");
+  assert.equal(safeReturnPath("//evil.example"), "/");
+  assert.equal(safeReturnPath("https://evil.example"), "/");
+  // A new error replaces an old one instead of sitting next to it.
+  assert.equal(pathWithError("/?error=old&q=a", "new one"), "/?error=new+one&q=a");
+  assert.equal(pathWithError("/media/new", "x"), "/media/new?error=x");
+});

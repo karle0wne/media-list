@@ -37,6 +37,8 @@ export type ImportedUserData = {
   score?: number | null;
   progressCurrent?: number;
   progressTotal?: number | null;
+  /** The file's numbers disagree (progress above total): keep the progress, drop the total. */
+  progressTotalUnknown?: boolean;
   notes?: string | null;
   /** Restored from a canonical export; defaults to the time of import. */
   createdAt?: Date;

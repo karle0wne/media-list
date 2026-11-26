@@ -24,7 +24,7 @@ external_source, external_id, type
 Optional columns:
 external_sub_id, title, status, score, progress_current, progress_total, notes, created_at, updated_at (ISO 8601, for example 2024-05-01T12:00:00Z)
 
-Accepted sources are ANILIST, TMDB, OPENLIBRARY, and RAWG. Types are ANIME, MOVIE, SERIES, BOOK, and GAME. TV seasons use the TMDB series ID plus external_sub_id=season:N. Rows are saved immediately and checked against the provider in the background, so a guessed or fabricated ID is marked as an error on the item instead of being rejected up front. Malformed identities (for example a non-numeric AniList ID) are rejected at import.
+Accepted sources are ANILIST, TMDB, OPENLIBRARY, and RAWG. Types are ANIME, MOVIE, SERIES, BOOK, and GAME. TV seasons use the TMDB series ID plus external_sub_id=season:N. Rows are saved immediately and checked against the provider in the background, so a guessed or fabricated ID is marked as an error on the item instead of being rejected up front. Malformed identities (for example a non-numeric AniList ID) are rejected at import. A row whose progress_current is above its progress_total is kept with its progress and an unknown total.
 
 Example output:
 external_source,external_id,external_sub_id,type,title,status,score,progress_current,progress_total,notes,created_at,updated_at

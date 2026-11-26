@@ -3,7 +3,7 @@ import { openDatabase } from "../../db";
 import { media } from "../../db/schema";
 import { tmdbMetadataTtlDaysSetting, tmdbRefreshLimitSetting } from "../../config/runtime";
 import { resolveExact } from "../providers";
-import { refreshMediaMetadata } from "../services/media";
+import { applyProviderCandidate } from "../services/enrichment";
 
 export async function refreshTmdbMetadata(now = new Date()) {
   if (!process.env.TMDB_API_TOKEN?.trim()) return { refreshed: 0, failed: 0, skipped: true };
@@ -36,7 +36,7 @@ export async function refreshTmdbMetadata(now = new Date()) {
           failed += 1;
           continue;
         }
-        await refreshMediaMetadata(db, item.id, candidate, now);
+        await applyProviderCandidate(db, item, candidate, now);
         refreshed += 1;
       } catch (error) {
         failed += 1;

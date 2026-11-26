@@ -19,19 +19,25 @@ export type ListUserMediaFilters = {
 
 /**
  * "verified": the candidate came straight from a provider lookup, so the shared record is
- * READY at once. "pending": the candidate is only trusted enough to save locally; the shared
- * record stays PENDING until background enrichment validates it against the provider.
+ * READY at once. "signed": a provider search result this server signed; it may fill in an
+ * unverified record but is still validated by enrichment. "pending": the candidate is only
+ * trusted enough to save locally (CSV rows); it never rewrites an existing shared record.
  */
-type MediaTrust = "verified" | "pending";
+type MediaTrust = "verified" | "signed" | "pending";
 
 /** The one place that creates or advances a shared `media` row for a provider identity. */
 async function ensureMediaRow(db: AppDb, candidate: MediaCandidate, trust: MediaTrust) {
   const existing = await findMedia(db, candidate);
   if (existing) {
     if (existing.metadataStatus === "READY") return existing;
-    // An unverified caller never rewrites a shared record: only a provider-fetched candidate
-    // may, otherwise one user's CSV could retitle a row that other users already track.
+    // A CSV row never rewrites a shared record, otherwise one user's file could retitle a work
+    // other users already track. Provider data (fetched or signed by this server) may.
     if (trust === "verified") await refreshMediaMetadata(db, existing.id, candidate);
+    else if (trust === "signed")
+      await db
+        .update(media)
+        .set({ ...candidateMetadataValues(candidate), metadataError: null })
+        .where(eq(media.id, existing.id));
     return (await findMedia(db, candidate)) ?? existing;
   }
   await db
@@ -70,17 +76,34 @@ export async function refreshMediaMetadata(
     .where(eq(media.id, mediaId));
 }
 
-/** Local-first add: no provider call; enrichment validates and completes the record later. */
+/**
+ * Local-first add: no provider call; enrichment validates and completes the record later.
+ * `needsEnrichment`: the shared record is not READY yet. `needsTotal`: a thin candidate (CSV
+ * row) landed on a READY record, so a lookup must still supply the total for this user.
+ */
 export async function addSelectedMediaToUser(
   db: AppDb,
   userId: string,
   candidate: MediaCandidate,
   userData: ImportedUserData = {},
+  options: {
+    trust?: "signed" | "pending";
+    /** The candidate holds only identity and title (CSV), so a total may still be missing. */
+    thin?: boolean;
+  } = {},
 ) {
   const progress = initialProgress(userData, candidate);
-  const item = await ensureMediaRow(db, candidate, "pending");
+  const item = await ensureMediaRow(db, candidate, options.trust ?? "pending");
   const result = await addUserMediaLink(db, userId, item.id, progress, userData);
-  return { ...result, item, needsEnrichment: item.metadataStatus !== "READY" };
+  const needsEnrichment = item.metadataStatus !== "READY";
+  const needsTotal =
+    options.thin === true &&
+    result.inserted &&
+    !needsEnrichment &&
+    progress.progressTotal == null &&
+    !userData.progressTotalUnknown &&
+    (candidate.type === "ANIME" || candidate.type === "SERIES" || candidate.type === "BOOK");
+  return { ...result, item, needsEnrichment, needsTotal };
 }
 
 /** Adds a candidate that was just fetched from the provider (READY immediately). */

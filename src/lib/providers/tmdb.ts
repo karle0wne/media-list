@@ -1,6 +1,7 @@
 import type { MediaCandidate } from "../types";
 import {
   nullIfNotFound,
+  ProviderNotConfiguredError,
   ProviderNotFoundError,
   providerFetch,
   providerResponseError,
@@ -12,11 +13,11 @@ function token() {
 }
 /** An unconfigured provider is an error to show, not a "not found" verdict on the item. */
 function requireToken() {
-  if (!token()) throw new Error("TMDB_API_TOKEN is not configured");
+  if (!token()) throw new ProviderNotConfiguredError("TMDB_API_TOKEN");
 }
 async function tmdb<T>(path: string, params?: Record<string, string>): Promise<T> {
   const apiToken = token();
-  if (!apiToken) throw new Error("TMDB_API_TOKEN is not configured");
+  if (!apiToken) throw new ProviderNotConfiguredError("TMDB_API_TOKEN");
   const url = new URL(`${API}${path}`);
   for (const [key, value] of Object.entries(params ?? {})) url.searchParams.set(key, value);
   const response = await providerFetch(url, {

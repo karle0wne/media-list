@@ -4,10 +4,24 @@ import { eq } from "drizzle-orm";
 import { importBatches, importRows, media, userMedia } from "../src/db/schema";
 import { signCandidate, verifyCandidate } from "../src/lib/candidate-token";
 import { exportCanonical, importCanonical } from "../src/lib/services/canonical";
-import { ProviderResponseError } from "../src/lib/providers/http";
-import { enrichMediaMetadata, enrichPendingBacklog } from "../src/lib/services/enrichment";
+import {
+  ProviderNetworkError,
+  ProviderResponseError,
+  ProviderTimeoutError,
+} from "../src/lib/providers/http";
+import {
+  applyProviderCandidate,
+  enrichMediaMetadata,
+  enrichPendingBacklog,
+  resetEnrichmentCooldowns,
+} from "../src/lib/services/enrichment";
 import { confirmBatch } from "../src/lib/services/imports";
-import { addSelectedMediaToUser, listUserMedia, searchKey } from "../src/lib/services/media";
+import {
+  addMediaToUser,
+  addSelectedMediaToUser,
+  listUserMedia,
+  searchKey,
+} from "../src/lib/services/media";
 import type { MediaCandidate } from "../src/lib/types";
 import { createTestDataOwner, openTestDatabase } from "./db";
 
@@ -204,33 +218,6 @@ test("the backlog drain completes pending records", async () => {
   }
 });
 
-test("a rate limit stops the drain and every record stays pending for a later pass", async () => {
-  const { db, sqlite } = openTestDatabase();
-  try {
-    const a = await createTestDataOwner(db);
-    for (const id of ["1", "2", "3"])
-      await addSelectedMediaToUser(db, a, { ...anime, externalId: id, key: `ANILIST:${id}:` });
-    let calls = 0;
-    await enrichPendingBacklog(db, {
-      batch: 3,
-      pauseMs: 0,
-      resolver: async () => {
-        calls += 1;
-        throw new ProviderResponseError("AniList", 429, 30);
-      },
-    });
-    assert.equal(calls, 1);
-    const states = (await db.select().from(media)).map((m) => m.metadataStatus).sort();
-    assert.deepEqual(
-      states,
-      ["PENDING", "PENDING", "PENDING"],
-      "a rate limit is not an item error",
-    );
-  } finally {
-    sqlite.close();
-  }
-});
-
 test("candidate tokens are verifiable, tamper-proof and expire", () => {
   const secret = "test-secret";
   const now = 1_000_000;
@@ -248,7 +235,7 @@ test("candidate tokens are verifiable, tamper-proof and expire", () => {
   assert.equal(verifyCandidate(malformed, now, secret), null);
 });
 
-test("progress that cannot fit the known total is rejected before anything is written", async () => {
+test("programmatic adds reject progress that cannot fit the total before writing anything", async () => {
   const { db, sqlite } = openTestDatabase();
   try {
     const a = await createTestDataOwner(db);
@@ -279,7 +266,8 @@ test("progress that cannot fit the known total is rejected before anything is wr
         "ANILIST,22,,ANIME,Fine,3,12",
       ].join("\n"),
     );
-    assert.deepEqual([report.imported, report.invalid], [1, 1]);
+    // A file with disagreeing numbers is restored, not rejected (see the reconcile test below).
+    assert.deepEqual([report.imported, report.invalid], [2, 0]);
   } finally {
     sqlite.close();
   }
@@ -297,6 +285,287 @@ test("a CSV title is flattened and capped before it reaches the shared catalogue
     );
     const titles = (await db.select().from(media)).map((m) => m.title).sort();
     assert.deepEqual(titles, ["Line one line two", long.slice(0, 200)].sort());
+  } finally {
+    sqlite.close();
+  }
+});
+
+function threePending(db: ReturnType<typeof openTestDatabase>["db"], userId: string) {
+  return Promise.all(
+    ["1", "2", "3"].map((id) =>
+      addSelectedMediaToUser(db, userId, { ...anime, externalId: id, key: `ANILIST:${id}:` }),
+    ),
+  );
+}
+const states = async (db: ReturnType<typeof openTestDatabase>["db"]) =>
+  (await db.select().from(media)).map((m) => m.metadataStatus).sort();
+
+test("a rate limit leaves records pending and the drain waits out a short pause", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    await threePending(db, a);
+    let calls = 0;
+    const slept: number[] = [];
+    await enrichPendingBacklog(db, {
+      batch: 3,
+      pauseMs: 0,
+      sleep: async (ms) => {
+        slept.push(ms);
+        resetEnrichmentCooldowns(); // time passes
+      },
+      resolver: async (source, externalId) => {
+        calls += 1;
+        if (calls === 1) throw new ProviderResponseError("AniList", 429, 30);
+        return { ...exact, source, externalId, key: `${source}:${externalId}:` };
+      },
+    });
+    assert.equal(slept.length, 1);
+    assert.ok(slept[0] > 29_000 && slept[0] <= 30_000, `waited ${slept[0]}ms`);
+    assert.deepEqual(await states(db), ["READY", "READY", "READY"]);
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("a long provider pause is not waited out: records stay pending and later runs skip it", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    await threePending(db, a);
+    let calls = 0;
+    const slept: number[] = [];
+    const resolver = async () => {
+      calls += 1;
+      throw new ProviderResponseError("AniList", 429, 900);
+    };
+    await enrichPendingBacklog(db, {
+      pauseMs: 0,
+      resolver,
+      sleep: async (ms) => void slept.push(ms),
+    });
+    assert.equal(calls, 1);
+    assert.deepEqual(slept, []);
+    assert.deepEqual(await states(db), ["PENDING", "PENDING", "PENDING"]);
+    // The page-view recovery path leaves the provider alone while its pause lasts.
+    const { enrichPendingMedia } = await import("../src/lib/services/enrichment");
+    assert.deepEqual(await enrichPendingMedia(db, 3, resolver), []);
+    assert.equal(calls, 1);
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("outages, timeouts and unreachable networks never turn a record into an error", async () => {
+  for (const failure of [
+    new ProviderResponseError("TMDB", 503, null),
+    new ProviderTimeoutError(5000),
+    new ProviderNetworkError("fetch failed"),
+  ]) {
+    resetEnrichmentCooldowns();
+    const { db, sqlite } = openTestDatabase();
+    try {
+      const a = await createTestDataOwner(db);
+      await threePending(db, a);
+      let calls = 0;
+      await enrichPendingBacklog(db, {
+        pauseMs: 0,
+        maxWaitMs: 0,
+        resolver: async () => {
+          calls += 1;
+          throw failure;
+        },
+      });
+      assert.equal(calls, 1, `${failure.name}: the provider is not hammered`);
+      assert.deepEqual(await states(db), ["PENDING", "PENDING", "PENDING"], failure.name);
+    } finally {
+      sqlite.close();
+      resetEnrichmentCooldowns();
+    }
+  }
+});
+
+test("a failure that will repeat is recorded as an error, and one provider's pause spares another", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    await addSelectedMediaToUser(db, a, anime);
+    await addSelectedMediaToUser(db, a, {
+      ...anime,
+      key: "OPENLIBRARY:OL1W:",
+      source: "OPENLIBRARY",
+      externalId: "OL1W",
+      type: "BOOK",
+    });
+    await enrichPendingBacklog(db, {
+      pauseMs: 0,
+      maxWaitMs: 0,
+      resolver: async (source, externalId) => {
+        if (source === "ANILIST") throw new ProviderResponseError("AniList", 429, 900);
+        return { ...exact, source, externalId, type: "BOOK", key: `${source}:${externalId}:` };
+      },
+    });
+    const byStatus = Object.fromEntries(
+      (await db.select().from(media)).map((m) => [m.externalSource, m.metadataStatus]),
+    );
+    assert.deepEqual(byStatus, { ANILIST: "PENDING", OPENLIBRARY: "READY" });
+
+    const item = (await db.select().from(media).where(eq(media.externalSource, "ANILIST")))[0];
+    resetEnrichmentCooldowns();
+    const result = await enrichMediaMetadata(db, item.id, async () => {
+      throw new Error("TMDB_API_TOKEN is not configured");
+    });
+    assert.equal(result.state, "error");
+  } finally {
+    sqlite.close();
+    resetEnrichmentCooldowns();
+  }
+});
+
+test("a CSV row for a record that is already READY still gets its total in the background", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db, "user_a");
+    const b = await createTestDataOwner(db, "user_b");
+    await addMediaToUser(db, a, { ...exact, episodeCount: 220 });
+    const report = await importCanonical(
+      db,
+      b,
+      "external_source,external_id,type,status\nANILIST,777001,ANIME,COMPLETED\n",
+    );
+    assert.equal(report.needsEnrichment, false);
+    assert.equal(report.totalLookups.length, 1);
+    let [row] = await rows(db, b);
+    assert.deepEqual([row.progressCurrent, row.progressTotal], [0, null]);
+
+    await enrichPendingBacklog(db, {
+      pauseMs: 0,
+      totalLookups: report.totalLookups,
+      resolver: async () => ({ ...exact, episodeCount: 220 }),
+    });
+    [row] = await rows(db, b);
+    assert.deepEqual([row.progressCurrent, row.progressTotal], [220, 220]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("maintenance refresh goes through the same rules as enrichment", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const added = await addSelectedMediaToUser(db, a, anime, { status: "COMPLETED" });
+    await assert.rejects(
+      applyProviderCandidate(db, added.item, { ...exact, externalId: "other" }),
+      /identity/i,
+    );
+    await applyProviderCandidate(db, added.item, exact);
+    const [row] = await rows(db, a);
+    assert.deepEqual([row.progressCurrent, row.progressTotal], [12, 12]);
+    assert.equal((await db.select().from(media))[0].metadataStatus, "READY");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a signed search result repairs an unverified shared record that a CSV created", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db, "user_a");
+    const b = await createTestDataOwner(db, "user_b");
+    await importCanonical(
+      db,
+      a,
+      "external_source,external_id,type,title\nANILIST,777001,ANIME,Typo\n",
+    );
+    await addSelectedMediaToUser(db, b, { ...exact, title: "Real Title" }, {}, { trust: "signed" });
+    const [item] = await db.select().from(media);
+    assert.equal(item.title, "Real Title");
+    assert.equal(item.metadataStatus, "PENDING", "enrichment still validates it");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a CSV row whose progress exceeds its total keeps the progress and drops the total", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const report = await importCanonical(
+      db,
+      a,
+      [
+        "external_source,external_id,type,status,progress_current,progress_total",
+        "ANILIST,21,ANIME,IN_PROGRESS,30,12",
+        "TMDB,603,MOVIE,IN_PROGRESS,5,",
+      ].join("\n"),
+    );
+    assert.deepEqual([report.imported, report.invalid, report.adjusted], [2, 0, 2]);
+    const list = await listUserMedia(db, a);
+    const onePiece = list.find((x) => x.externalId === "21")!;
+    assert.deepEqual([onePiece.progressCurrent, onePiece.progressTotal], [30, null]);
+    // The provider's total is adopted later only if the saved progress still fits it.
+    const [row] = (await rows(db, a)).filter((r) => r.progressCurrent === 30);
+    await enrichMediaMetadata(db, onePiece.mediaId, async () => ({ ...exact, episodeCount: 12 }));
+    assert.equal((await rows(db, a)).find((r) => r.id === row.id)!.progressTotal, null);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a big CSV import hands control back to other work and has a row limit", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const lines = ["external_source,external_id,type"];
+    for (let i = 1; i <= 300; i += 1) lines.push(`ANILIST,${i},ANIME`);
+    let ticks = 0;
+    const timer = setInterval(() => (ticks += 1), 0);
+    const report = await importCanonical(db, a, lines.join("\n"));
+    clearInterval(timer);
+    assert.equal(report.imported, 300);
+    assert.ok(ticks > 0, "timers ran while the import was in progress");
+
+    const tooMany = ["external_source,external_id,type"];
+    for (let i = 1; i <= 5001; i += 1) tooMany.push(`ANILIST,${i},ANIME`);
+    await assert.rejects(importCanonical(db, a, tooMany.join("\n")), /too many rows/);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("records of an unconfigured provider fail at once without pacing, since nothing is sent", async () => {
+  resetEnrichmentCooldowns();
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    for (const id of ["1", "2", "3", "4"])
+      await addSelectedMediaToUser(db, a, {
+        ...anime,
+        key: `TMDB:${id}:`,
+        source: "TMDB",
+        externalId: id,
+        type: "MOVIE",
+      });
+    const { ProviderNotConfiguredError } = await import("../src/lib/providers/http");
+    const started = Date.now();
+    await enrichPendingBacklog(db, {
+      batch: 4,
+      pauseMs: 400,
+      resolver: async () => {
+        throw new ProviderNotConfiguredError("TMDB_API_TOKEN");
+      },
+    });
+    assert.ok(Date.now() - started < 800, "four records would take 1.2s if each were paced");
+    assert.deepEqual(await states(db), ["ERROR", "ERROR", "ERROR", "ERROR"]);
+    const [item] = await db.select().from(media);
+    assert.equal(item.metadataError, "TMDB_API_TOKEN is not configured");
   } finally {
     sqlite.close();
   }

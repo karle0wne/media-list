@@ -14,6 +14,7 @@ import {
 import { updateUserProgress } from "@/lib/services/progress";
 import { createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
+import { pathWithError, safeReturnPath } from "@/lib/search-params";
 import { parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
 
 function str(form: FormData, key: string) {
@@ -22,13 +23,11 @@ function str(form: FormData, key: string) {
 }
 
 function goError(path: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : "Unexpected error";
-  redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
+  redirect(pathWithError(path, error instanceof Error ? error.message : "Unexpected error"));
 }
 
 function returnTo(form: FormData) {
-  const value = str(form, "returnTo");
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  return safeReturnPath(str(form, "returnTo"));
 }
 
 export async function addCandidateAction(form: FormData) {
@@ -36,7 +35,15 @@ export async function addCandidateAction(form: FormData) {
   try {
     const candidate = verifyCandidate(str(form, "candidateToken"));
     if (!candidate) throw new Error("Search result expired or the server restarted; search again");
-    const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
+    const result = await addSelectedMediaToUser(
+      getDatabase().db,
+      user.id,
+      candidate,
+      {},
+      {
+        trust: "signed",
+      },
+    );
     if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
   } catch (error) {
     goError("/media/new", error);
@@ -124,8 +131,9 @@ export async function canonicalImportAction(form: FormData) {
     if (!(file instanceof File) || file.size === 0) throw new Error("Choose a canonical CSV file");
     if (file.size > 2_000_000) throw new Error("Canonical CSV is too large (2 MB max)");
     const report = await importCanonical(getDatabase().db, user.id, await file.text());
-    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0] ? `; ${report.errors[0]}` : ""}${report.needsEnrichment ? "; details are filling in the background" : ""}`;
-    if (report.needsEnrichment) scheduleEnrichmentBacklog();
+    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.adjusted ? `; ${report.adjusted} row${report.adjusted === 1 ? "" : "s"} had progress above the total and keep an unknown total` : ""}${report.errors[0] ? `; ${report.errors[0]}` : ""}${report.needsEnrichment || report.totalLookups.length ? "; details are filling in the background" : ""}`;
+    if (report.needsEnrichment || report.totalLookups.length)
+      scheduleEnrichmentBacklog(report.totalLookups);
   } catch (error) {
     goError("/import", error);
   }
