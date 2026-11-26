@@ -112,7 +112,7 @@ export async function importCanonical(db: AppDb, userId: string, input: string) 
       const result = await addSelectedMediaToUser(
         db,
         userId,
-        { ...identity, key, title: row.title?.trim() || key },
+        { ...identity, key, title: cleanTitle(row.title) || key },
         userData,
       );
       if (result.inserted) report.imported += 1;
@@ -126,6 +126,15 @@ export async function importCanonical(db: AppDb, userId: string, input: string) 
     }
   }
   return report;
+}
+
+/** The title is shown to every user who tracks this work, so it is kept short and plain. */
+function cleanTitle(value: string | undefined) {
+  return (value ?? "")
+    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
 }
 
 function parseTimestamp(value: string | undefined, label: string) {

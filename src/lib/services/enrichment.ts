@@ -44,6 +44,11 @@ export async function enrichMediaMetadata(
       await adoptTotalForOwners(db, item.id, candidate);
       return { state: "ready" as const };
     } catch (error) {
+      if (error instanceof ProviderResponseError && error.status === 429) {
+        // A rate limit says nothing about the item itself: it stays PENDING for a later pass
+        // instead of becoming a permanent error the user has to retry by hand.
+        return { state: "rate_limited" as const, error: error.message };
+      }
       const message = (error instanceof Error ? error.message : "Metadata enrichment failed").slice(
         0,
         500,
@@ -52,11 +57,7 @@ export async function enrichMediaMetadata(
         .update(media)
         .set({ metadataStatus: "ERROR", metadataError: message })
         .where(eq(media.id, mediaId));
-      return {
-        state: "error" as const,
-        error: message,
-        rateLimited: error instanceof ProviderResponseError && error.status === 429,
-      };
+      return { state: "error" as const, error: message };
     }
   } finally {
     active.delete(mediaId);
@@ -83,7 +84,7 @@ export async function enrichPendingMedia(
     if (index > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
     const result = await enrichMediaMetadata(db, item.id, resolver);
     results.push(result);
-    if (result.state === "error" && result.rateLimited) break;
+    if (result.state === "rate_limited") break;
   }
   return results;
 }
@@ -93,7 +94,7 @@ export async function enrichPendingBacklog(
   db: AppDb,
   options: { batch?: number; maxItems?: number; pauseMs?: number; resolver?: ExactResolver } = {},
 ) {
-  const { batch = 5, maxItems = 300, pauseMs = 300, resolver = resolveExact } = options;
+  const { batch = 5, maxItems = 1000, pauseMs = 300, resolver = resolveExact } = options;
   let processed = 0;
   while (processed < maxItems) {
     const results = await enrichPendingMedia(db, batch, resolver, pauseMs);
@@ -101,7 +102,7 @@ export async function enrichPendingBacklog(
       (result) => result.state === "ready" || result.state === "error",
     );
     processed += advanced.length;
-    if (!advanced.length || results.some((r) => r.state === "error" && r.rateLimited)) break;
+    if (!advanced.length || results.some((r) => r.state === "rate_limited")) break;
   }
   return processed;
 }

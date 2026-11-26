@@ -100,6 +100,9 @@ test("library search folds Cyrillic case, matches romanized titles and treats % 
     assert.deepEqual(await titles("%"), ["100% Pure"]);
     assert.deepEqual(await titles("_"), []);
     assert.equal(searchKey("Ёлка"), searchKey("елка"));
+    assert.equal(searchKey("Café"), searchKey("cafe"));
+    assert.notEqual(searchKey("й"), searchKey("и"));
+    assert.notEqual(searchKey("が"), searchKey("か"));
   } finally {
     sqlite.close();
   }
@@ -201,7 +204,7 @@ test("the backlog drain completes pending records", async () => {
   }
 });
 
-test("a rate limit stops the drain and leaves the remaining records pending", async () => {
+test("a rate limit stops the drain and every record stays pending for a later pass", async () => {
   const { db, sqlite } = openTestDatabase();
   try {
     const a = await createTestDataOwner(db);
@@ -218,7 +221,11 @@ test("a rate limit stops the drain and leaves the remaining records pending", as
     });
     assert.equal(calls, 1);
     const states = (await db.select().from(media)).map((m) => m.metadataStatus).sort();
-    assert.deepEqual(states, ["ERROR", "PENDING", "PENDING"]);
+    assert.deepEqual(
+      states,
+      ["PENDING", "PENDING", "PENDING"],
+      "a rate limit is not an item error",
+    );
   } finally {
     sqlite.close();
   }
@@ -239,4 +246,58 @@ test("candidate tokens are verifiable, tamper-proof and expire", () => {
   assert.equal(verifyCandidate(`${payload}`, now, secret), null);
   const malformed = signCandidate({ ...anime, externalId: "not-a-number" }, now, secret);
   assert.equal(verifyCandidate(malformed, now, secret), null);
+});
+
+test("progress that cannot fit the known total is rejected before anything is written", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const movie: MediaCandidate = {
+      ...anime,
+      key: "TMDB:603:",
+      source: "TMDB",
+      externalId: "603",
+      type: "MOVIE",
+    };
+    await assert.rejects(
+      addSelectedMediaToUser(db, a, movie, { progressCurrent: 5 }),
+      /cannot exceed the known total \(1\)/,
+    );
+    await assert.rejects(
+      addSelectedMediaToUser(db, a, anime, { progressCurrent: 30, progressTotal: 12 }),
+      /cannot exceed the known total \(12\)/,
+    );
+    assert.equal((await db.select().from(media)).length, 0, "no shared record is left behind");
+    assert.equal((await rows(db, a)).length, 0);
+
+    const report = await importCanonical(
+      db,
+      a,
+      [
+        "external_source,external_id,external_sub_id,type,title,progress_current,progress_total",
+        "ANILIST,21,,ANIME,One Piece,30,12",
+        "ANILIST,22,,ANIME,Fine,3,12",
+      ].join("\n"),
+    );
+    assert.deepEqual([report.imported, report.invalid], [1, 1]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a CSV title is flattened and capped before it reaches the shared catalogue", async () => {
+  const { db, sqlite } = openTestDatabase();
+  try {
+    const a = await createTestDataOwner(db);
+    const long = "x".repeat(500);
+    await importCanonical(
+      db,
+      a,
+      `external_source,external_id,type,title\nANILIST,31,ANIME,"Line one\nline\u0000 two"\nANILIST,32,ANIME,${long}`,
+    );
+    const titles = (await db.select().from(media)).map((m) => m.title).sort();
+    assert.deepEqual(titles, ["Line one line two", long.slice(0, 200)].sort());
+  } finally {
+    sqlite.close();
+  }
 });

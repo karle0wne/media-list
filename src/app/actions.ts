@@ -35,7 +35,7 @@ export async function addCandidateAction(form: FormData) {
   const user = await requireIdentity();
   try {
     const candidate = verifyCandidate(str(form, "candidateToken"));
-    if (!candidate) throw new Error("Search result expired; search again");
+    if (!candidate) throw new Error("Search result expired or the server restarted; search again");
     const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
     if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
   } catch (error) {

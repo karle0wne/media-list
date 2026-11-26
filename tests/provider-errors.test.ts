@@ -69,3 +69,14 @@ test("network failures are never reported as a missing item", async () => {
     },
   );
 });
+
+test("an unconfigured TMDB is an error to show, not a verdict that the item is missing", async () => {
+  const original = process.env.TMDB_API_TOKEN;
+  delete process.env.TMDB_API_TOKEN;
+  try {
+    await assert.rejects(getTmdbMovie("603"), /TMDB_API_TOKEN is not configured/);
+    await assert.rejects(getTmdbSeason("1399", "season:1"), /TMDB_API_TOKEN is not configured/);
+  } finally {
+    if (original !== undefined) process.env.TMDB_API_TOKEN = original;
+  }
+});

@@ -33,6 +33,8 @@ export function initialProgress(
     userData.status === "COMPLETED" && progressTotal != null
       ? progressTotal
       : (userData.progressCurrent ?? 0);
+  if (progressTotal != null && progressCurrent > progressTotal)
+    throw new Error(`Progress cannot exceed the known total (${progressTotal})`);
   return { progressCurrent, progressTotal };
 }
 

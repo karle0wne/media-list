@@ -10,6 +10,10 @@ const IMG = "https://image.tmdb.org/t/p/w185";
 function token() {
   return process.env.TMDB_API_TOKEN?.trim() || null;
 }
+/** An unconfigured provider is an error to show, not a "not found" verdict on the item. */
+function requireToken() {
+  if (!token()) throw new Error("TMDB_API_TOKEN is not configured");
+}
 async function tmdb<T>(path: string, params?: Record<string, string>): Promise<T> {
   const apiToken = token();
   if (!apiToken) throw new Error("TMDB_API_TOKEN is not configured");
@@ -110,7 +114,8 @@ export async function getTmdbShowSeasons(seriesId: string): Promise<MediaCandida
   return show ? seasonCandidates(show, 30) : [];
 }
 export async function getTmdbMovie(id: string): Promise<MediaCandidate | null> {
-  if (!token() || !/^\d+$/.test(id)) return null;
+  requireToken();
+  if (!/^\d+$/.test(id)) return null;
   const item = await nullIfNotFound(() => tmdb<MovieSearch>(`/movie/${id}`, { language: "en-US" }));
   return item ? movieSearchCandidate(item) : null;
 }
@@ -118,7 +123,8 @@ export async function getTmdbSeason(
   seriesId: string,
   subId: string,
 ): Promise<MediaCandidate | null> {
-  if (!token() || !/^\d+$/.test(seriesId)) return null;
+  requireToken();
+  if (!/^\d+$/.test(seriesId)) return null;
   const match = /^season:(\d+)$/.exec(subId);
   if (!match) return null;
   const show = await nullIfNotFound(() =>

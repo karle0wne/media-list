@@ -77,8 +77,9 @@ export async function addSelectedMediaToUser(
   candidate: MediaCandidate,
   userData: ImportedUserData = {},
 ) {
+  const progress = initialProgress(userData, candidate);
   const item = await ensureMediaRow(db, candidate, "pending");
-  const result = await addUserMediaLink(db, userId, item.id, candidate, userData);
+  const result = await addUserMediaLink(db, userId, item.id, progress, userData);
   return { ...result, item, needsEnrichment: item.metadataStatus !== "READY" };
 }
 
@@ -89,8 +90,9 @@ export async function addMediaToUser(
   candidate: MediaCandidate,
   userData: ImportedUserData = {},
 ) {
+  const progress = initialProgress(userData, candidate);
   const item = await ensureMediaRow(db, candidate, "verified");
-  const result = await addUserMediaLink(db, userId, item.id, candidate, userData);
+  const result = await addUserMediaLink(db, userId, item.id, progress, userData);
   return { item, ...result };
 }
 
@@ -216,12 +218,17 @@ export async function listUserMedia(db: AppDb, userId: string, filters: ListUser
   );
 }
 
-/** Case-, accent- and ё/е-insensitive form used to compare search text with titles. */
+/**
+ * Case-insensitive form used to compare search text with titles. Accents on Latin letters
+ * and ё/е are folded; other marks are kept, so "й" and "и" or "が" and "か" stay different.
+ */
 export function searchKey(value: string) {
   return value
     .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLocaleLowerCase()
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
+    .toLowerCase()
+    .replaceAll("ё", "е")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -241,7 +248,7 @@ async function addUserMediaLink(
   db: AppDb,
   userId: string,
   mediaId: string,
-  candidate: MediaCandidate,
+  progress: { progressCurrent: number; progressTotal: number | null },
   userData: ImportedUserData,
 ) {
   const existing = (
@@ -261,7 +268,7 @@ async function addUserMediaLink(
       mediaId,
       status: userData.status ?? "PLANNED",
       score: userData.score ?? null,
-      ...initialProgress(userData, candidate),
+      ...progress,
       notes: userData.notes ?? null,
       createdAt,
       updatedAt: userData.updatedAt ?? createdAt,
