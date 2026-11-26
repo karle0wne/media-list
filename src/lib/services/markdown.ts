@@ -1,24 +1,11 @@
 import type { AppDb } from "@/db";
+import { STATUS_LABELS, TYPE_PLURAL_LABELS } from "../labels";
 import { externalMediaUrl } from "../providers/urls";
 import type { MediaStatus, MediaType } from "../types";
 import { listUserMedia } from "./media";
 
 const typeOrder: MediaType[] = ["ANIME", "MOVIE", "SERIES", "BOOK", "GAME"];
-const typeLabels: Record<MediaType, string> = {
-  ANIME: "Anime",
-  MOVIE: "Movies",
-  SERIES: "Series",
-  BOOK: "Books",
-  GAME: "Games",
-};
 const statusOrder: MediaStatus[] = ["IN_PROGRESS", "PLANNED", "COMPLETED", "ON_HOLD", "DROPPED"];
-const statusLabels: Record<MediaStatus, string> = {
-  IN_PROGRESS: "In progress",
-  PLANNED: "Planned",
-  COMPLETED: "Completed",
-  ON_HOLD: "On hold",
-  DROPPED: "Dropped",
-};
 const statusRank = new Map(statusOrder.map((status, index) => [status, index]));
 
 export async function exportMarkdown(db: AppDb, userId: string, exportedAt = new Date()) {
@@ -34,7 +21,7 @@ export async function exportMarkdown(db: AppDb, userId: string, exportedAt = new
       );
     if (!group.length) continue;
     out.push(
-      `## ${typeLabels[type]}`,
+      `## ${TYPE_PLURAL_LABELS[type]}`,
       "",
       "| Status | Title | Year | Score | Progress | Notes | Date added | Date updated |",
       "| --- | --- | ---: | ---: | --- | --- | --- | --- |",
@@ -43,7 +30,7 @@ export async function exportMarkdown(db: AppDb, userId: string, exportedAt = new
       const link =
         row.externalUrl || externalMediaUrl(row.source, row.externalId, row.externalSubId);
       out.push(
-        `| ${statusLabels[row.status]} | [${tableCell(row.title)}](${link}) | ${row.year ?? "—"} | ${row.score != null ? `${row.score}/10` : "—"} | ${progress(row.type, row.progressCurrent, row.progressTotal)} | ${row.notes ? tableCell(row.notes) : "—"} | ${date(row.createdAt)} | ${date(row.updatedAt)} |`,
+        `| ${STATUS_LABELS[row.status]} | [${tableCell(row.title)}](${link}) | ${row.year ?? "—"} | ${row.score != null ? `${row.score}/10` : "—"} | ${progress(row.type, row.progressCurrent, row.progressTotal)} | ${row.notes ? tableCell(row.notes) : "—"} | ${date(row.createdAt)} | ${date(row.updatedAt)} |`,
       );
     }
     out.push("");

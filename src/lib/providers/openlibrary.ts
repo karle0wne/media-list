@@ -11,6 +11,9 @@ type SearchDoc = {
 };
 type Work = {
   key?: string;
+  type?: { key?: string };
+  /** Set on a merged work: `/type/redirect` points here instead of carrying any data. */
+  location?: string;
   title?: string;
   covers?: number[];
   first_publish_date?: string;
@@ -56,16 +59,30 @@ export async function searchOpenLibrary(query: string, limit = 5): Promise<Media
     ];
   });
 }
-export async function getOpenLibraryWork(id: string): Promise<MediaCandidate | null> {
-  const normalized = workId(id);
-  if (!normalized) return null;
-  const response = await providerFetch(`${API}/works/${normalized}.json`, {
+async function fetchWork(id: string): Promise<Work | null> {
+  const response = await providerFetch(`${API}/works/${id}.json`, {
     cache: "no-store",
     headers: { "user-agent": "media-list/0.1" },
   });
   if (response.status === 404) return null;
   if (!response.ok) throw providerResponseError("Open Library", response);
-  const work = (await response.json()) as Work;
+  return (await response.json()) as Work;
+}
+export async function getOpenLibraryWork(id: string): Promise<MediaCandidate | null> {
+  const normalized = workId(id);
+  if (!normalized) return null;
+  let target = normalized;
+  let work = await fetchWork(target);
+  // A merged work answers with a redirect record; follow it once. The identity stays the one
+  // that was asked for, so a saved list position keeps pointing at the same work.
+  if (work?.type?.key === "/type/redirect") {
+    const next = workId(work.location);
+    if (!next) return null;
+    target = next;
+    work = await fetchWork(target);
+  }
+  if (!work) return null;
+  if (!work.title) throw new Error(`Open Library work ${normalized} has no title`);
   const description =
     typeof work.description === "string" ? work.description : work.description?.value;
   let pageCount: number | null = null;
@@ -73,7 +90,7 @@ export async function getOpenLibraryWork(id: string): Promise<MediaCandidate | n
   let credit: string | null = null;
   try {
     const searchUrl = new URL(`${API}/search.json`);
-    searchUrl.searchParams.set("q", `key:${normalized}`);
+    searchUrl.searchParams.set("q", `key:${target}`);
     searchUrl.searchParams.set("limit", "1");
     searchUrl.searchParams.set(
       "fields",
@@ -96,8 +113,8 @@ export async function getOpenLibraryWork(id: string): Promise<MediaCandidate | n
     source: "OPENLIBRARY",
     externalId: normalized,
     externalSubId: "",
-    title: work.title || normalized,
-    originalTitle: work.title ?? null,
+    title: work.title,
+    originalTitle: work.title,
     year: canonicalYear ?? parseYear(work.first_publish_date),
     pageCount,
     coverUrl: work.covers?.[0]

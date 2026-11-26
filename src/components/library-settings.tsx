@@ -10,14 +10,9 @@ import {
   DEFAULT_VISIBLE_COLUMNS,
   serializeVisibleColumns,
 } from "@/lib/library-view";
+import { TYPE_PLURAL_LABELS } from "@/lib/labels";
 
-const types: Array<[MediaType, string]> = [
-  ["ANIME", "Anime"],
-  ["MOVIE", "Movies"],
-  ["SERIES", "Series"],
-  ["BOOK", "Books"],
-  ["GAME", "Games"],
-];
+const types = Object.entries(TYPE_PLURAL_LABELS) as Array<[MediaType, string]>;
 
 const columns = [
   ["status", "Status"],

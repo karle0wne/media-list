@@ -431,15 +431,6 @@ button.danger {
   text-overflow: ellipsis;
   max-width: 560px;
 }
-.rowNotes {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 560px;
-}
 .metadataState {
   font-size: 10px;
   color: var(--muted);
@@ -687,7 +678,6 @@ td {
     min-width: 260px;
   }
   .rowMeta,
-  .rowNotes,
   .metadataState {
     max-width: 330px;
   }

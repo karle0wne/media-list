@@ -80,3 +80,33 @@ test("an unconfigured TMDB is an error to show, not a verdict that the item is m
     if (original !== undefined) process.env.TMDB_API_TOKEN = original;
   }
 });
+
+test("an Open Library work that was merged is followed and keeps the requested identity", async () => {
+  const { getOpenLibraryWork } = await import("../src/lib/providers/openlibrary");
+  const originalFetch = globalThis.fetch;
+  const seen: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push(url);
+    if (url.endsWith("/works/OL1W.json"))
+      return Response.json({ type: { key: "/type/redirect" }, location: "/works/OL2W" });
+    if (url.endsWith("/works/OL2W.json")) return Response.json({ title: "Dune", covers: [7] });
+    if (url.includes("/search.json"))
+      return Response.json({ docs: [{ number_of_pages_median: 412 }] });
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const book = await getOpenLibraryWork("OL1W");
+    assert.equal(book?.title, "Dune");
+    assert.equal(book?.externalId, "OL1W");
+    assert.equal(book?.pageCount, 412);
+    assert.ok(seen.some((url) => url.includes("key%3AOL2W")));
+
+    globalThis.fetch = (async () => Response.json({ key: "/works/OL3W" })) as typeof fetch;
+    await assert.rejects(getOpenLibraryWork("OL3W"), /has no title/);
+    globalThis.fetch = (async () => new Response("", { status: 404 })) as typeof fetch;
+    assert.equal(await getOpenLibraryWork("OL4W"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

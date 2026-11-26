@@ -24,3 +24,12 @@ export const STATUS_ORDER: readonly MediaStatus[] = [
   "DROPPED",
   "PLANNED",
 ];
+
+/** Plural forms for group headings and filter menus. */
+export const TYPE_PLURAL_LABELS: Record<MediaType, string> = {
+  ANIME: "Anime",
+  MOVIE: "Movies",
+  SERIES: "Series",
+  BOOK: "Books",
+  GAME: "Games",
+};
