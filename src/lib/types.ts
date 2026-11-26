@@ -38,4 +38,7 @@ export type ImportedUserData = {
   progressCurrent?: number;
   progressTotal?: number | null;
   notes?: string | null;
+  /** Restored from a canonical export; defaults to the time of import. */
+  createdAt?: Date;
+  updatedAt?: Date;
 };

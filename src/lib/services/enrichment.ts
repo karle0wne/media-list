@@ -1,6 +1,9 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
+import { assertSameIdentity } from "../domain/identity";
+import { adoptProviderTotal, defaultProgressTotal } from "../domain/progress";
+import { ProviderResponseError } from "../providers/http";
 import { resolveExact } from "../providers";
 import type { MediaCandidate, MediaIdentity } from "../types";
 import { findMediaById, refreshMediaMetadata } from "./media";
@@ -31,26 +34,14 @@ export async function enrichMediaMetadata(
         item.type,
       );
       if (!candidate) throw new Error("Provider validation failed");
-      if (
-        candidate.source !== item.externalSource ||
-        candidate.externalId !== item.externalId ||
-        candidate.externalSubId !== item.externalSubId
-      )
-        throw new Error("Provider returned a different media identity");
-      if (candidate.type !== item.type)
-        throw new Error(`Provider item type is ${candidate.type}, expected ${item.type}`);
+      assertSameIdentity(candidate, {
+        source: item.externalSource,
+        externalId: item.externalId,
+        externalSubId: item.externalSubId,
+        type: item.type,
+      });
       await refreshMediaMetadata(db, item.id, candidate);
-      const progressTotal = defaultProgressTotal(candidate);
-      if (progressTotal != null) {
-        await db
-          .update(userMedia)
-          .set({ progressTotal })
-          .where(and(eq(userMedia.mediaId, item.id), isNull(userMedia.progressTotal)));
-        await db
-          .update(userMedia)
-          .set({ progressCurrent: progressTotal })
-          .where(and(eq(userMedia.mediaId, item.id), eq(userMedia.status, "COMPLETED")));
-      }
+      await adoptTotalForOwners(db, item.id, candidate);
       return { state: "ready" as const };
     } catch (error) {
       const message = (error instanceof Error ? error.message : "Metadata enrichment failed").slice(
@@ -61,17 +52,26 @@ export async function enrichMediaMetadata(
         .update(media)
         .set({ metadataStatus: "ERROR", metadataError: message })
         .where(eq(media.id, mediaId));
-      return { state: "error" as const, error: message };
+      return {
+        state: "error" as const,
+        error: message,
+        rateLimited: error instanceof ProviderResponseError && error.status === 429,
+      };
     }
   } finally {
     active.delete(mediaId);
   }
 }
 
+/**
+ * Enriches up to `limit` pending records one after another. A rate limit stops the run: the
+ * remaining records stay PENDING for a later pass instead of each failing against the limit.
+ */
 export async function enrichPendingMedia(
   db: AppDb,
   limit = 3,
   resolver: ExactResolver = resolveExact,
+  pauseMs = 0,
 ) {
   const pending = await db
     .select({ id: media.id })
@@ -79,12 +79,48 @@ export async function enrichPendingMedia(
     .where(eq(media.metadataStatus, "PENDING"))
     .limit(Math.max(1, limit));
   const results = [];
-  for (const item of pending) results.push(await enrichMediaMetadata(db, item.id, resolver));
+  for (const [index, item] of pending.entries()) {
+    if (index > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
+    const result = await enrichMediaMetadata(db, item.id, resolver);
+    results.push(result);
+    if (result.state === "error" && result.rateLimited) break;
+  }
   return results;
 }
 
-function defaultProgressTotal(candidate: MediaCandidate) {
-  if (candidate.type === "MOVIE") return 1;
-  if (candidate.type === "BOOK") return candidate.pageCount ?? null;
-  return candidate.episodeCount ?? null;
+/** Drains the whole pending backlog in bounded batches (after a bulk import). */
+export async function enrichPendingBacklog(
+  db: AppDb,
+  options: { batch?: number; maxItems?: number; pauseMs?: number; resolver?: ExactResolver } = {},
+) {
+  const { batch = 5, maxItems = 300, pauseMs = 300, resolver = resolveExact } = options;
+  let processed = 0;
+  while (processed < maxItems) {
+    const results = await enrichPendingMedia(db, batch, resolver, pauseMs);
+    const advanced = results.filter(
+      (result) => result.state === "ready" || result.state === "error",
+    );
+    processed += advanced.length;
+    if (!advanced.length || results.some((r) => r.state === "error" && r.rateLimited)) break;
+  }
+  return processed;
+}
+
+async function adoptTotalForOwners(db: AppDb, mediaId: string, candidate: MediaCandidate) {
+  const providerTotal = defaultProgressTotal(candidate);
+  if (providerTotal == null) return;
+  const rows = await db
+    .select({
+      id: userMedia.id,
+      status: userMedia.status,
+      progressCurrent: userMedia.progressCurrent,
+      progressTotal: userMedia.progressTotal,
+    })
+    .from(userMedia)
+    .where(eq(userMedia.mediaId, mediaId));
+  for (const row of rows) {
+    // Not an edit by the user: `updatedAt` stays so the "recently updated" order is theirs.
+    const patch = adoptProviderTotal(row, providerTotal);
+    if (patch) await db.update(userMedia).set(patch).where(eq(userMedia.id, row.id));
+  }
 }

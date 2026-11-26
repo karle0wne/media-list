@@ -19,14 +19,14 @@ The result must be directly pasteable into media-list Quick Import without editi
 export const CANONICAL_CSV_HELP = `Canonical CSV is the strict round-trip format for media-list. Use it when you already have exact provider identities and want to preserve user state such as status, score, progress, or notes.
 
 Required identity columns:
-external_source, external_id, external_sub_id, type, title
+external_source, external_id, type
 
-User-state columns:
-status, score, progress_current, progress_total, notes
+Optional columns:
+external_sub_id, title, status, score, progress_current, progress_total, notes, created_at, updated_at (ISO 8601, for example 2024-05-01T12:00:00Z)
 
-Accepted sources are ANILIST, TMDB, OPENLIBRARY, and RAWG. Types are ANIME, MOVIE, SERIES, BOOK, and GAME. TV seasons use the TMDB series ID plus external_sub_id=season:N. The application revalidates every provider identity during import, so guessed or fabricated IDs are invalid.
+Accepted sources are ANILIST, TMDB, OPENLIBRARY, and RAWG. Types are ANIME, MOVIE, SERIES, BOOK, and GAME. TV seasons use the TMDB series ID plus external_sub_id=season:N. Rows are saved immediately and checked against the provider in the background, so a guessed or fabricated ID is marked as an error on the item instead of being rejected up front. Malformed identities (for example a non-numeric AniList ID) are rejected at import.
 
 Example output:
-external_source,external_id,external_sub_id,type,title,status,score,progress_current,progress_total,notes
-ANILIST,1,,ANIME,Cowboy Bebop,COMPLETED,9,26,26,
-TMDB,1396,season:1,SERIES,Breaking Bad — Season 1,COMPLETED,10,7,7,`;
+external_source,external_id,external_sub_id,type,title,status,score,progress_current,progress_total,notes,created_at,updated_at
+ANILIST,1,,ANIME,Cowboy Bebop,COMPLETED,9,26,26,,2024-05-01T12:00:00Z,2024-05-01T12:00:00Z
+TMDB,1396,season:1,SERIES,Breaking Bad — Season 1,COMPLETED,10,7,7,,,`;

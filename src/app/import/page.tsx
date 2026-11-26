@@ -72,7 +72,7 @@ export default async function ImportPage({
             <HelpDialog
               buttonLabel="CSV format"
               title="Canonical CSV format"
-              intro="Provider identities are revalidated; guessed IDs are rejected."
+              intro="Rows are saved at once and verified against the provider in the background."
               text={CANONICAL_CSV_HELP}
             />
           </div>

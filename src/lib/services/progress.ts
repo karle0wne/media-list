@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { userMedia } from "@/db/schema";
+import { applyProgress } from "../domain/progress";
 
 export async function updateUserProgress(
   db: AppDb,
@@ -16,14 +17,8 @@ export async function updateUserProgress(
       .limit(1)
   )[0];
   if (!row) return;
-  if (row.progressTotal != null && progressCurrent > row.progressTotal)
-    throw new Error(`Progress cannot exceed the known total (${row.progressTotal})`);
-  const status =
-    row.status === "COMPLETED" && row.progressTotal != null && progressCurrent !== row.progressTotal
-      ? ("IN_PROGRESS" as const)
-      : row.status;
   await db
     .update(userMedia)
-    .set({ progressCurrent, status, updatedAt: new Date() })
+    .set({ ...applyProgress(row, progressCurrent), updatedAt: new Date() })
     .where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)));
 }

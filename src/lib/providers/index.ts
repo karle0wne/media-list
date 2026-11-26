@@ -122,14 +122,6 @@ export async function resolveExternalUrl(raw: string): Promise<MediaCandidate[]>
   }
   return [];
 }
-export function parseCandidateKey(key: string) {
-  const [source, externalId, ...rest] = key.split(":");
-  const externalSubId = rest.join(":");
-  if (!(["ANILIST", "TMDB", "OPENLIBRARY", "RAWG"] as string[]).includes(source) || !externalId)
-    return null;
-  return { source: source as ExternalSource, externalId, externalSubId };
-}
-
 async function searchAnime(query: string, limit: number) {
   const direct = await searchAniList(query, limit);
   if (!CYRILLIC.test(query) || direct.length >= ALIAS_DISCOVERY_THRESHOLD) return direct;

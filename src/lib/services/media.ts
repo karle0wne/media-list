@@ -1,15 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, isNotNull, like, ne, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { media, userMedia } from "@/db/schema";
-import { resolveExact } from "../providers";
-import type {
-  ImportedUserData,
-  MediaCandidate,
-  MediaIdentity,
-  MediaStatus,
-  MediaType,
-} from "../types";
+import { completionProgress, initialProgress } from "../domain/progress";
+import type { ImportedUserData, MediaCandidate, MediaStatus, MediaType } from "../types";
+
 export type MediaSort = "updated" | "created" | "title" | "score" | "progress" | "type" | "year";
 export type SortDirection = "asc" | "desc";
 export type ListUserMediaFilters = {
@@ -21,24 +16,23 @@ export type ListUserMediaFilters = {
   sort?: MediaSort;
   direction?: SortDirection;
 };
-export async function ensureMedia(db: AppDb, candidate: MediaCandidate) {
-  const existing = await findMedia(
-    db,
-    candidate.source,
-    candidate.externalId,
-    candidate.externalSubId,
-  );
+
+/**
+ * "verified": the candidate came straight from a provider lookup, so the shared record is
+ * READY at once. "pending": the candidate is only trusted enough to save locally; the shared
+ * record stays PENDING until background enrichment validates it against the provider.
+ */
+type MediaTrust = "verified" | "pending";
+
+/** The one place that creates or advances a shared `media` row for a provider identity. */
+async function ensureMediaRow(db: AppDb, candidate: MediaCandidate, trust: MediaTrust) {
+  const existing = await findMedia(db, candidate);
   if (existing) {
-    if (existing.metadataStatus !== "READY") {
-      await refreshMediaMetadata(db, existing.id, candidate);
-      return (await findMedia(
-        db,
-        candidate.source,
-        candidate.externalId,
-        candidate.externalSubId,
-      ))!;
-    }
-    return existing;
+    if (existing.metadataStatus === "READY") return existing;
+    // An unverified caller never rewrites a shared record: only a provider-fetched candidate
+    // may, otherwise one user's CSV could retitle a row that other users already track.
+    if (trust === "verified") await refreshMediaMetadata(db, existing.id, candidate);
+    return (await findMedia(db, candidate)) ?? existing;
   }
   await db
     .insert(media)
@@ -49,20 +43,16 @@ export async function ensureMedia(db: AppDb, candidate: MediaCandidate) {
       externalId: candidate.externalId,
       externalSubId: candidate.externalSubId,
       ...candidateMetadataValues(candidate),
-      metadataStatus: "READY",
+      metadataStatus: trust === "verified" ? "READY" : "PENDING",
       metadataError: null,
-      metadataRefreshedAt: new Date(),
+      metadataRefreshedAt: trust === "verified" ? new Date() : null,
     })
     .onConflictDoNothing();
-  const resolved = await findMedia(
-    db,
-    candidate.source,
-    candidate.externalId,
-    candidate.externalSubId,
-  );
-  if (!resolved) throw new Error("Failed to create media record");
-  return resolved;
+  const created = await findMedia(db, candidate);
+  if (!created) throw new Error("Failed to create media record");
+  return created;
 }
+
 export async function refreshMediaMetadata(
   db: AppDb,
   mediaId: string,
@@ -79,71 +69,31 @@ export async function refreshMediaMetadata(
     })
     .where(eq(media.id, mediaId));
 }
-export async function resolveAndAddMedia(
-  db: AppDb,
-  userId: string,
-  identity: MediaIdentity,
-  userData: ImportedUserData = {},
-) {
-  const candidate = await resolveExact(
-    identity.source,
-    identity.externalId,
-    identity.externalSubId,
-    identity.type,
-  );
-  if (!candidate) throw new Error("Provider validation failed");
-  assertSameIdentity(candidate, identity);
-  return addMediaToUser(db, userId, candidate, userData);
-}
+
+/** Local-first add: no provider call; enrichment validates and completes the record later. */
 export async function addSelectedMediaToUser(
   db: AppDb,
   userId: string,
   candidate: MediaCandidate,
   userData: ImportedUserData = {},
 ) {
-  let item = await findMedia(db, candidate.source, candidate.externalId, candidate.externalSubId);
-  if (!item) {
-    await db
-      .insert(media)
-      .values({
-        id: randomUUID(),
-        type: candidate.type,
-        externalSource: candidate.source,
-        externalId: candidate.externalId,
-        externalSubId: candidate.externalSubId,
-        ...candidateMetadataValues(candidate),
-        metadataStatus: "PENDING",
-        metadataError: null,
-        metadataRefreshedAt: null,
-      })
-      .onConflictDoNothing();
-    item = await findMedia(db, candidate.source, candidate.externalId, candidate.externalSubId);
-  } else if (item.metadataStatus !== "READY") {
-    await db
-      .update(media)
-      .set({
-        ...candidateMetadataValues(candidate),
-        type: candidate.type,
-        metadataStatus: "PENDING",
-        metadataError: null,
-      })
-      .where(eq(media.id, item.id));
-    item = await findMedia(db, candidate.source, candidate.externalId, candidate.externalSubId);
-  }
-  if (!item) throw new Error("Failed to create media record");
+  const item = await ensureMediaRow(db, candidate, "pending");
   const result = await addUserMediaLink(db, userId, item.id, candidate, userData);
   return { ...result, item, needsEnrichment: item.metadataStatus !== "READY" };
 }
+
+/** Adds a candidate that was just fetched from the provider (READY immediately). */
 export async function addMediaToUser(
   db: AppDb,
   userId: string,
   candidate: MediaCandidate,
   userData: ImportedUserData = {},
 ) {
-  const item = await ensureMedia(db, candidate);
+  const item = await ensureMediaRow(db, candidate, "verified");
   const result = await addUserMediaLink(db, userId, item.id, candidate, userData);
   return { item, ...result };
 }
+
 export async function retryMediaMetadata(db: AppDb, userId: string, mediaId: string) {
   const owned = (
     await db
@@ -159,6 +109,7 @@ export async function retryMediaMetadata(db: AppDb, userId: string, mediaId: str
     .where(eq(media.id, mediaId));
   return true;
 }
+
 type UserMediaUpdate = {
   status: MediaStatus;
   score: number | null;
@@ -166,6 +117,7 @@ type UserMediaUpdate = {
   progressTotal: number | null;
   notes: string | null;
 };
+
 export async function updateUserMedia(
   db: AppDb,
   userId: string,
@@ -182,20 +134,18 @@ export async function updateUserMedia(
         .where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)))
         .limit(1)
     )[0];
-    const total = values.progressTotal ?? current?.progressTotal ?? null;
-    if (total != null) {
-      normalized.progressTotal = total;
-      normalized.progressCurrent = total;
-    }
+    if (current) Object.assign(normalized, completionProgress(current, values.progressTotal));
   }
   await db
     .update(userMedia)
     .set({ ...normalized, updatedAt: new Date() })
     .where(and(eq(userMedia.id, id), eq(userMedia.userId, userId)));
 }
+
 export async function deleteUserMedia(db: AppDb, userId: string, id: string) {
   await deleteUserMediaMany(db, userId, [id]);
 }
+
 export async function deleteUserMediaMany(db: AppDb, userId: string, ids: string[]) {
   const unique = [...new Set(ids.filter(Boolean))].slice(0, 500);
   if (!unique.length) return;
@@ -203,11 +153,11 @@ export async function deleteUserMediaMany(db: AppDb, userId: string, ids: string
     .delete(userMedia)
     .where(and(eq(userMedia.userId, userId), inArray(userMedia.id, unique)));
 }
+
 export async function listUserMedia(db: AppDb, userId: string, filters: ListUserMediaFilters = {}) {
   const clauses: SQL[] = [eq(userMedia.userId, userId)];
   if (filters.status) clauses.push(eq(userMedia.status, filters.status));
   if (filters.types?.length) clauses.push(inArray(media.type, filters.types));
-  if (filters.q?.trim()) clauses.push(like(media.title, `%${filters.q.trim()}%`));
   if (filters.scoreMin != null) clauses.push(gte(userMedia.score, filters.scoreMin));
   if (filters.hasNotes) clauses.push(and(isNotNull(userMedia.notes), ne(userMedia.notes, ""))!);
   const direction = filters.direction === "asc" ? asc : desc;
@@ -227,7 +177,7 @@ export async function listUserMedia(db: AppDb, userId: string, filters: ListUser
                 : filters.sort === "year"
                   ? direction(media.year)
                   : direction(userMedia.updatedAt);
-  return db
+  const rows = await db
     .select({
       userMediaId: userMedia.id,
       mediaId: media.id,
@@ -255,7 +205,27 @@ export async function listUserMedia(db: AppDb, userId: string, filters: ListUser
     .innerJoin(media, eq(userMedia.mediaId, media.id))
     .where(and(...clauses))
     .orderBy(order, asc(media.title));
+  // Matching is done here rather than with SQL LIKE: SQLite folds case for ASCII only, so
+  // Cyrillic and accented titles would not be found.
+  const needle = searchKey(filters.q ?? "");
+  if (!needle) return rows;
+  return rows.filter((row) =>
+    [row.title, row.originalTitle, row.romanizedTitle].some(
+      (title) => title != null && searchKey(title).includes(needle),
+    ),
+  );
 }
+
+/** Case-, accent- and ё/е-insensitive form used to compare search text with titles. */
+export function searchKey(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function candidateMetadataValues(candidate: MediaCandidate) {
   return {
     title: candidate.title,
@@ -266,6 +236,7 @@ function candidateMetadataValues(candidate: MediaCandidate) {
     coverUrl: candidate.coverUrl ?? null,
   };
 }
+
 async function addUserMediaLink(
   db: AppDb,
   userId: string,
@@ -281,10 +252,7 @@ async function addUserMediaLink(
       .limit(1)
   )[0];
   if (existing) return { inserted: false };
-  const now = new Date();
-  const total = userData.progressTotal ?? defaultProgressTotal(candidate);
-  const current =
-    userData.status === "COMPLETED" && total != null ? total : (userData.progressCurrent ?? 0);
+  const createdAt = userData.createdAt ?? new Date();
   await db
     .insert(userMedia)
     .values({
@@ -293,33 +261,22 @@ async function addUserMediaLink(
       mediaId,
       status: userData.status ?? "PLANNED",
       score: userData.score ?? null,
-      progressCurrent: current,
-      progressTotal: total,
+      ...initialProgress(userData, candidate),
       notes: userData.notes ?? null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt: userData.updatedAt ?? createdAt,
     })
     .onConflictDoNothing();
   return { inserted: true };
 }
+
 export async function findMediaById(db: AppDb, mediaId: string) {
   return (await db.select().from(media).where(eq(media.id, mediaId)).limit(1))[0] ?? null;
 }
-function assertSameIdentity(candidate: MediaCandidate, identity: MediaIdentity) {
-  if (
-    candidate.source !== identity.source ||
-    candidate.externalId !== identity.externalId ||
-    candidate.externalSubId !== identity.externalSubId
-  )
-    throw new Error("Provider returned a different media identity");
-  if (candidate.type !== identity.type)
-    throw new Error(`Provider item type is ${candidate.type}, expected ${identity.type}`);
-}
+
 async function findMedia(
   db: AppDb,
-  source: MediaCandidate["source"],
-  externalId: string,
-  externalSubId: string,
+  identity: Pick<MediaCandidate, "source" | "externalId" | "externalSubId">,
 ) {
   return (
     (
@@ -328,17 +285,12 @@ async function findMedia(
         .from(media)
         .where(
           and(
-            eq(media.externalSource, source),
-            eq(media.externalId, externalId),
-            eq(media.externalSubId, externalSubId),
+            eq(media.externalSource, identity.source),
+            eq(media.externalId, identity.externalId),
+            eq(media.externalSubId, identity.externalSubId),
           ),
         )
         .limit(1)
     )[0] ?? null
   );
-}
-function defaultProgressTotal(candidate: MediaCandidate) {
-  if (candidate.type === "MOVIE") return 1;
-  if (candidate.type === "BOOK") return candidate.pageCount ?? null;
-  return candidate.episodeCount ?? null;
 }

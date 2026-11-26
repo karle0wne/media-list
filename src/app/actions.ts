@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/db";
 import { requireIdentity } from "@/lib/identity";
-import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
-import { parseCandidateKey, resolveExact } from "@/lib/providers";
+import { verifyCandidate } from "@/lib/candidate-token";
+import { scheduleEnrichmentBacklog, scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import {
   addSelectedMediaToUser,
   deleteUserMediaMany,
@@ -14,7 +14,7 @@ import {
 import { updateUserProgress } from "@/lib/services/progress";
 import { createQuickImport, confirmBatch } from "@/lib/services/imports";
 import { importCanonical } from "@/lib/services/canonical";
-import { isMediaType, parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
+import { parseMediaStatus, parseOptionalNonNegativeInteger } from "@/lib/user-media";
 
 function str(form: FormData, key: string) {
   const value = form.get(key);
@@ -34,11 +34,8 @@ function returnTo(form: FormData) {
 export async function addCandidateAction(form: FormData) {
   const user = await requireIdentity();
   try {
-    const key = parseCandidateKey(str(form, "candidateKey"));
-    const type = str(form, "candidateType");
-    if (!key || !isMediaType(type)) throw new Error("Candidate is invalid; search again");
-    const candidate = await resolveExact(key.source, key.externalId, key.externalSubId, type);
-    if (!candidate) throw new Error("Candidate could not be revalidated; search again");
+    const candidate = verifyCandidate(str(form, "candidateToken"));
+    if (!candidate) throw new Error("Search result expired; search again");
     const result = await addSelectedMediaToUser(getDatabase().db, user.id, candidate);
     if (result.needsEnrichment) scheduleMediaEnrichment(result.item.id);
   } catch (error) {
@@ -127,7 +124,8 @@ export async function canonicalImportAction(form: FormData) {
     if (!(file instanceof File) || file.size === 0) throw new Error("Choose a canonical CSV file");
     if (file.size > 2_000_000) throw new Error("Canonical CSV is too large (2 MB max)");
     const report = await importCanonical(getDatabase().db, user.id, await file.text());
-    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0] ? `; ${report.errors[0]}` : ""}`;
+    summary = `Imported ${report.imported}; duplicates ${report.duplicates}; invalid ${report.invalid}${report.errors[0] ? `; ${report.errors[0]}` : ""}${report.needsEnrichment ? "; details are filling in the background" : ""}`;
+    if (report.needsEnrichment) scheduleEnrichmentBacklog();
   } catch (error) {
     goError("/import", error);
   }
@@ -141,7 +139,8 @@ export async function confirmImportAction(form: FormData) {
   for (const [key, value] of form.entries())
     if (key.startsWith("row:") && typeof value === "string") selections[key.slice(4)] = value;
   const report = await confirmBatch(getDatabase().db, user.id, batchId, selections);
+  if (report.needsEnrichment) scheduleEnrichmentBacklog();
   redirect(
-    `/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}`)}`,
+    `/import?result=${encodeURIComponent(`Imported ${report.imported}; skipped ${report.skipped}; invalid ${report.invalid}${report.needsEnrichment ? "; details are filling in the background" : ""}`)}`,
   );
 }

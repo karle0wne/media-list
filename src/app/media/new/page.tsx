@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProviderCover } from "@/components/provider-cover";
+import { signCandidate } from "@/lib/candidate-token";
 import { requireIdentity } from "@/lib/identity";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
 import {
@@ -125,8 +126,7 @@ export default async function AddPage({
                 )}
             </div>
             <form action={addCandidateAction}>
-              <input type="hidden" name="candidateKey" value={item.key} />
-              <input type="hidden" name="candidateType" value={item.type} />
+              <input type="hidden" name="candidateToken" value={signCandidate(item)} />
               <button type="submit" aria-label={`Add ${item.title}`}>
                 Add
               </button>

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { importBatches, importRows } from "@/db/schema";
-import { parseCandidateKey, resolveExternalUrl, searchAllProviders } from "../providers";
+import { resolveExternalUrl, searchAllProviders } from "../providers";
 import type { ImportedUserData, MediaCandidate } from "../types";
-import { resolveAndAddMedia } from "./media";
+import { addSelectedMediaToUser } from "./media";
 
 export async function createQuickImport(db: AppDb, userId: string, text: string) {
   const lines = text
@@ -83,7 +83,7 @@ export async function confirmBatch(
 ) {
   const data = await getBatch(db, userId, batchId);
   if (!data) throw new Error("Import batch not found");
-  const report = { imported: 0, skipped: 0, invalid: 0 };
+  const report = { imported: 0, skipped: 0, invalid: 0, needsEnrichment: false };
   for (const row of data.rows) {
     const selected = selections[row.id];
     if (!selected) {
@@ -91,9 +91,10 @@ export async function confirmBatch(
       await db.update(importRows).set({ state: "SKIPPED" }).where(eq(importRows.id, row.id));
       continue;
     }
-    const parsed = parseCandidateKey(selected);
+    // The staged candidate was written by this server when the batch was resolved, so the
+    // add is local-first: no provider round trip here, enrichment validates it afterwards.
     const preview = row.candidates.find((candidate) => candidate.key === selected);
-    if (!parsed || !preview) {
+    if (!preview) {
       report.invalid += 1;
       await db
         .update(importRows)
@@ -102,18 +103,14 @@ export async function confirmBatch(
       continue;
     }
     try {
-      const result = await resolveAndAddMedia(
-        db,
-        userId,
-        { ...parsed, type: preview.type },
-        row.userData,
-      );
+      const result = await addSelectedMediaToUser(db, userId, preview, row.userData);
       await db
         .update(importRows)
         .set({ state: "CONFIRMED", selectedCandidateKey: selected, errorMessage: null })
         .where(eq(importRows.id, row.id));
       if (result.inserted) report.imported += 1;
       else report.skipped += 1;
+      if (result.needsEnrichment) report.needsEnrichment = true;
     } catch (error) {
       report.invalid += 1;
       await db
