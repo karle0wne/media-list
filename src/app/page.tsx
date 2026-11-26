@@ -1,4 +1,5 @@
 import "./library.css";
+import { cookies } from "next/headers";
 import { requireIdentity } from "@/lib/identity";
 import { getDatabase } from "@/db";
 import { scheduleMediaEnrichment } from "@/lib/enrichment-runtime";
@@ -9,9 +10,12 @@ import type { MediaStatus } from "@/lib/types";
 import {
   DEFAULT_LIBRARY_DIRECTION,
   DEFAULT_LIBRARY_SORT,
+  parseViewMode,
   parseVisibleColumns,
+  VIEW_MODE_COOKIE,
 } from "@/lib/library-view";
 import { LibraryWorkspace } from "@/components/library-workspace";
+import { singleSearchParams, type RawSearchParams } from "@/lib/search-params";
 
 const statuses: Array<[string, MediaStatus | ""]> = [
   ["All", ""],
@@ -32,15 +36,12 @@ const sortKeys = new Set<MediaSort>([
   "year",
 ]);
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | undefined>>;
-}) {
+export default async function Home({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
   const user = await requireIdentity();
   scheduleMediaEnrichment();
 
-  const params = await searchParams;
+  const params = singleSearchParams(await searchParams);
+  const viewMode = parseViewMode((await cookies()).get(VIEW_MODE_COOKIE)?.value);
   const status = isMediaStatus(params.status) ? params.status : undefined;
   const selectedTypes = (params.types ?? "").split(",").filter(isMediaType);
   const q = params.q?.trim() ?? "";
@@ -97,6 +98,7 @@ export default async function Home({
       {params.error && <p className="error">{params.error}</p>}
       <LibraryWorkspace
         key={current}
+        initialViewMode={viewMode}
         items={items.map((item) => ({
           ...item,
           externalUrl:

@@ -251,10 +251,10 @@ export function LibraryTable({
                   </td>
                 )}
                 {visible.has("added") && (
-                  <td className="compactCell">{new Date(item.createdAt).toLocaleDateString()}</td>
+                  <td className="compactCell">{item.createdAt.slice(0, 10)}</td>
                 )}
                 {visible.has("updated") && (
-                  <td className="compactCell">{new Date(item.updatedAt).toLocaleDateString()}</td>
+                  <td className="compactCell">{item.updatedAt.slice(0, 10)}</td>
                 )}
               </tr>
             ))}

@@ -1,5 +1,12 @@
 import type { MediaSort, SortDirection } from "./services/media";
 
+export type ViewMode = "table" | "grid";
+/** A cookie rather than localStorage, so the server renders the chosen view on first paint. */
+export const VIEW_MODE_COOKIE = "media-list-view";
+export function parseViewMode(value?: string): ViewMode {
+  return value === "grid" ? "grid" : "table";
+}
+
 export type VisibleColumn = "status" | "score" | "progress" | "type" | "added" | "updated";
 
 export const DEFAULT_VISIBLE_COLUMNS: VisibleColumn[] = ["status", "score", "progress", "type"];

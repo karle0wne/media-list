@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useState } from "react";
 import type { MediaSort, SortDirection } from "@/lib/services/media";
+import { VIEW_MODE_COOKIE, type ViewMode } from "@/lib/library-view";
 import type { MediaStatus, MediaType } from "@/lib/types";
 import { LibraryGrid } from "./library-grid";
 import { LibrarySettings } from "./library-settings";
@@ -15,12 +16,8 @@ type StatusLink = {
   href: string;
 };
 
-type ViewMode = "table" | "grid";
-
-const VIEW_MODE_STORAGE_KEY = "media-list:view-mode:v1";
-const VIEW_MODE_EVENT = "media-list:view-mode-change";
-
 export function LibraryWorkspace({
+  initialViewMode,
   items,
   returnTo,
   visibleColumns,
@@ -34,6 +31,7 @@ export function LibraryWorkspace({
   query,
   hiddenSearchParams,
 }: {
+  initialViewMode: ViewMode;
   items: LibraryRow[];
   returnTo: string;
   visibleColumns: string[];
@@ -47,11 +45,11 @@ export function LibraryWorkspace({
   query: string;
   hiddenSearchParams: Array<[string, string]>;
 }) {
-  const viewMode = useSyncExternalStore(subscribeToViewMode, readViewMode, defaultViewMode);
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
 
   function chooseView(mode: ViewMode) {
-    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
-    window.dispatchEvent(new Event(VIEW_MODE_EVENT));
+    document.cookie = `${VIEW_MODE_COOKIE}=${mode}; path=/; max-age=31536000; samesite=lax`;
+    setViewMode(mode);
   }
 
   return (
@@ -142,24 +140,6 @@ export function LibraryWorkspace({
       )}
     </>
   );
-}
-
-function subscribeToViewMode(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  window.addEventListener(VIEW_MODE_EVENT, onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener(VIEW_MODE_EVENT, onChange);
-  };
-}
-
-function readViewMode(): ViewMode {
-  const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
-  return stored === "grid" ? "grid" : "table";
-}
-
-function defaultViewMode(): ViewMode {
-  return "table";
 }
 
 function statusClass(status: MediaStatus | null) {

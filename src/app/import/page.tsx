@@ -1,14 +1,15 @@
 import { requireIdentity } from "@/lib/identity";
+import { singleSearchParams, type RawSearchParams } from "@/lib/search-params";
 import { CANONICAL_CSV_HELP, QUICK_IMPORT_PROMPT } from "@/lib/import-help";
 import { HelpDialog } from "@/components/help-dialog";
 import { canonicalImportAction, quickImportAction } from "../actions";
 export default async function ImportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; result?: string }>;
+  searchParams: Promise<RawSearchParams>;
 }) {
   await requireIdentity();
-  const { error, result } = await searchParams;
+  const { error, result } = singleSearchParams(await searchParams);
   return (
     <section className="flowPage">
       <div className="pageTitle">

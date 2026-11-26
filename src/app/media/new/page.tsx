@@ -10,6 +10,7 @@ import {
   searchSeriesShows,
 } from "@/lib/providers";
 import type { MediaCandidate, MediaType } from "@/lib/types";
+import { singleSearchParams, type RawSearchParams } from "@/lib/search-params";
 import { isMediaType } from "@/lib/user-media";
 import type { TmdbShowCandidate } from "@/lib/providers/tmdb";
 import { addCandidateAction } from "../../actions";
@@ -22,11 +23,11 @@ const baseCategories: Array<[MediaType, string]> = [
 export default async function AddPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; q?: string; show?: string; error?: string }>;
+  searchParams: Promise<RawSearchParams>;
 }) {
   await requireIdentity();
   scheduleMediaEnrichment();
-  const params = await searchParams;
+  const params = singleSearchParams(await searchParams);
   const gamesEnabled = rawgConfigured();
   const categories: Array<[MediaType, string]> = gamesEnabled
     ? [...baseCategories, ["GAME", "Games"]]

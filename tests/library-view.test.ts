@@ -34,3 +34,21 @@ test("visible columns distinguish defaults from explicitly empty", () => {
 test("library defaults to latest user update", () => {
   assert.equal(DEFAULT_LIBRARY_SORT, "updated");
 });
+
+test("repeated or oversized query parameters cannot break a page", async () => {
+  const { singleSearchParams } = await import("../src/lib/search-params");
+  assert.deepEqual(singleSearchParams({ q: ["a", "b"], sort: "title", empty: undefined }), {
+    q: "a",
+    sort: "title",
+    empty: undefined,
+  });
+  assert.equal(singleSearchParams({ error: "x".repeat(5000) }).error?.length, 500);
+});
+
+test("the stored view mode accepts only known values", async () => {
+  const { parseViewMode } = await import("../src/lib/library-view");
+  assert.equal(parseViewMode("grid"), "grid");
+  assert.equal(parseViewMode("table"), "table");
+  assert.equal(parseViewMode("<script>"), "table");
+  assert.equal(parseViewMode(undefined), "table");
+});
